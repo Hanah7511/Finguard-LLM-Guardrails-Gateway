@@ -1,0 +1,31 @@
+# Secrets: never commit real keys
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Runtime output (audit logs may contain sensitive operational data)
+logs/
+*.jsonl
+
+# Downloaded models / indexes
+models/
+*.faiss
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

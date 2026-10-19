@@ -1,0 +1,60 @@
+# Superseded by v1.1.0. Kept for audit: SAR reports validated under 1.0.0 reference it.
+
+policy_metadata:
+  version: "1.0.0"
+  effective_date: "2026-03-01"
+  approved_by: "compliance-team"
+  change_reason: "Initial guardrail policy"
+
+input_guardrails:
+  require_consent: true
+  max_query_chars: 4000
+  injection_patterns:
+    - "ignore previous instructions"
+    - "you are now"
+    - "pretend you are"
+    - "disregard your guidelines"
+  safety_patterns:
+    - "avoid aml detection"
+    - "bypass kyc"
+    - "hide transaction"
+    - "launder"
+    - "evade compliance"
+  pii_entities:
+    - US_BANK_NUMBER
+    - IBAN_CODE
+    - US_SSN
+    - CREDIT_CARD
+  custom_pii_recognizers:
+    - entity_type: ACCOUNT_NUMBER
+      regex: "\\b\\d{10}\\b"
+      score: 0.85
+      context: ["account", "acct"]
+
+tool_call_guardrails:
+  allowlist:
+    investigation_agent:
+      - transaction_lookup
+      - customer_history
+    compliance_agent:
+      - rag_retrieval
+      - sanctions_check
+    summarization_agent:
+      - report_template
+
+output_guardrails:
+  grounding_method: "nli"
+  minimum_confidence: 0.80
+  entailment_threshold: 0.70
+  contradiction_threshold: 0.40
+  max_retries: 2
+
+risk_assessment:
+  signal_weights:
+    structuring_flag: 0.40
+    velocity_score: 0.20
+    new_device_flag: 0.14
+
+sanctions_screening:
+  lists: ["OFAC", "UN", "EU"]
+  fuzzy_match_threshold: 0.85
