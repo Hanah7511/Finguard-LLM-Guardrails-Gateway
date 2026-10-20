@@ -384,7 +384,7 @@ services:
 - [x] Versioned YAML policy engine (v1.0.0, v1.1.0)
 - [x] Guardrail modules for all 6 layers (input, tool-call, output, safety, privacy, compliance)
 - [x] Security model designed (5 properties) — implementation in progress
-- [ ] `orchestrator.py` — in progress
+- [x] `orchestrator.py` — single brain for both doors (one `handle_*` per job; risk score = higher of FinGuard and upstream engine score)
 - [ ] FastAPI door
 - [ ] MCP server (8 tools)
 - [ ] Tests + evals

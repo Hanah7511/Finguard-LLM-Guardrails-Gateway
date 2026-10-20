@@ -123,6 +123,6 @@ class GuardrailPipeline:
             outcome.status, outcome.message = "BLOCKED", HALLUCINATION_MESSAGE
             outcome.blocked_by = result.decisions[-1].layer
         else:
-            # Escalated answers are withheld from the end user; analysts see them in review.
+            # Escalated answers are withheld from the end user 
             outcome.status, outcome.message = "ESCALATED", ESCALATION_MESSAGE
         return outcome
