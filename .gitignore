@@ -33,3 +33,6 @@ Thumbs.db
 #licensed / copyrighted legal texts: kept local, never committed in repo
 data/legal_sources/
 data/law_store/regulations_local.json
+
+# Real sanctions lists: large, change daily, rebuilt by scripts/build_sanctions_lists.py
+data/sanctions/sanctions_list.json

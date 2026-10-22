@@ -27,7 +27,10 @@ class Settings(BaseSettings):
     regulations_path: Path = PROJECT_ROOT / "data" / "law_store" / "regulations.json"
     # Optional, gitignored: FATF/UAE/CBUAE text built by scripts/build_local_law_store.py
     local_regulations_path: Path = PROJECT_ROOT / "data" / "law_store" / "regulations_local.json"
-    sanctions_list_path: Path = PROJECT_ROOT / "data" / "sanctions" / "sample_sanctions_list.json"
+     # Real lists, built by scripts/build_sanctions_lists.py (gitignored)
+    sanctions_list_path: Path = PROJECT_ROOT / "data" / "sanctions" / "sanctions_list.json"
+    # FICTIONAL list, used only when the real lists have not been built
+    sanctions_test_list_path: Path = PROJECT_ROOT / "data" / "sanctions" / "test_sanctions_list.json"
     audit_log_path: Path = PROJECT_ROOT / "logs" / "audit.jsonl"
 
     # Models (loaded lazily, only when first needed)

@@ -7,12 +7,13 @@ handle_* method runs only the checks that request needs, writes one audit record
 """
 from __future__ import annotations
 
+import logging
 import uuid
 from functools import lru_cache
 from typing import Any, Optional
 
 from src.config.policy_loader import get_policy
-from src.config.policy_schema import GuardrailPolicy
+from src.config.policy_schema import GuardrailPolicy, SanctionsScreeningPolicy
 from src.config.settings import Settings, get_settings
 from src.core.guardrail_pipeline import GuardrailPipeline
 from src.core.risk_assessor import RiskAssessor
@@ -32,6 +33,8 @@ from src.output_guardrails.grounding.nli_grounding import NLIGrounder
 from src.output_guardrails.pipeline import OutputGuardrailPipeline
 from src.tool_call_guardrails.pipeline import ToolCallGuardrailPipeline
 from src.vector_store.retriever import Embedder, RegulationRetriever, SentenceTransformerEmbedder
+
+logger = logging.getLogger(__name__)
 
 _GROUNDING_REASONS = {
     GroundingVerdict.GROUNDED: "claim_supported_by_source",
@@ -80,9 +83,7 @@ class Orchestrator:
 
         s = policy.sanctions_screening
         self.risk = RiskAssessor(policy.risk_assessment, s.high_risk_jurisdictions, self.version)
-        self.sanctions = sanctions or SanctionsScreener.from_json(
-            settings.sanctions_list_path, s.lists, s.fuzzy_match_threshold, s.high_risk_jurisdictions
-        )
+        self.sanctions = sanctions or self._load_sanctions(settings, s)
 
         self.cost_tracker = CostTracker()
         self.audit = audit or DecisionLogger(settings.audit_log_path, build_log_scrubber())
@@ -99,6 +100,20 @@ class Orchestrator:
             policy.output_guardrails.max_retries,
             self.version,
             settings.retrieval_top_k,
+        )
+
+    @staticmethod
+    def _load_sanctions(settings: Settings, cfg: SanctionsScreeningPolicy) -> SanctionsScreener:
+        path, source = settings.sanctions_list_path, "official"
+        if not path.exists():
+            # Screening against fictional names must never pass silently as real screening.
+            logger.warning(
+                "Real sanctions lists not found at %s; using the FICTIONAL test list. "
+                "Run scripts/build_sanctions_lists.py.", path
+            )
+            path, source = settings.sanctions_test_list_path, "test"
+        return SanctionsScreener.from_json(
+            path, cfg.lists, cfg.fuzzy_match_threshold, cfg.high_risk_jurisdictions, source
         )
 
     def _build_grounder(self, settings: Settings, embedder: Embedder) -> Grounder:
@@ -264,6 +279,7 @@ class Orchestrator:
             "match_found": r.match_found,
             "exact_match": r.exact_match,
             "checked_lists": r.checked_lists,
+            "list_source": self.sanctions.source,
             "matches": [
                 {"listed_name": m.name, "list": m.list_name, "program": m.program, "score": m.score}
                 for m in r.matches

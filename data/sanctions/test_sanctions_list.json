@@ -1,0 +1,113 @@
+{
+  "_notice": "FICTIONAL test data in the same format as scripts/build_sanctions_lists.py output. These names are invented and are NOT real sanctions designations. Used when the real lists have not been built, and by tests.",
+  "_meta": {
+    "TEST": {"source_url": "", "published": "2026-10-22", "count": 7, "retrieved_on": "2026-10-22"}
+  },
+  "entries": [
+    {
+      "name": "Viktor Sampleov",
+      "aliases": ["Victor Sampleov", "Viktor Samplov"],
+      "weak_aliases": ["The Sample"],
+      "names_original_script": ["Виктор Сэмплов"],
+      "list": "OFAC",
+      "list_id": "TEST-OFAC-1",
+      "program": "SAMPLE-PROGRAM",
+      "entity_type": "individual",
+      "dates_of_birth": ["1971-03-14"],
+      "nationalities": ["Russia"],
+      "id_numbers": [{"type": "Passport", "number": "TP0000001", "country": "Russia"}],
+      "listed_on": "2024-01-15",
+      "remarks": "Fictional entry for testing."
+    },
+    {
+      "name": "Northwind Shell Trading LLC",
+      "aliases": ["Northwind Shell Trading", "NW Shell Trading Company"],
+      "weak_aliases": [],
+      "names_original_script": [],
+      "list": "OFAC",
+      "list_id": "TEST-OFAC-2",
+      "program": "SAMPLE-PROGRAM",
+      "entity_type": "entity",
+      "dates_of_birth": [],
+      "nationalities": ["Iran"],
+      "id_numbers": [{"type": "Registration Number", "number": "TR-000002", "country": "Iran"}],
+      "listed_on": "2023-06-01",
+      "remarks": "Fictional entry for testing."
+    },
+    {
+      "name": "Jana Demonstrova",
+      "aliases": [],
+      "weak_aliases": [],
+      "names_original_script": [],
+      "list": "OFAC",
+      "list_id": "TEST-OFAC-3",
+      "program": "SAMPLE-PROGRAM",
+      "entity_type": "individual",
+      "dates_of_birth": ["1985-07-22"],
+      "nationalities": ["Belarus"],
+      "id_numbers": [],
+      "listed_on": "2025-02-10",
+      "remarks": "Fictional entry for testing."
+    },
+    {
+      "name": "Mohammed Al Exampleh",
+      "aliases": ["Muhammad Al-Exampleh", "Mohamad Alexampleh"],
+      "weak_aliases": ["Abu Example"],
+      "names_original_script": ["\u0645\u062d\u0645\u062f \u0627\u0644\u0625\u0643\u0632\u0627\u0645\u0628\u0644\u0647"],
+      "list": "UN",
+      "list_id": "TEST-UN-1",
+      "program": "SAMPLE-PROGRAM",
+      "entity_type": "individual",
+      "dates_of_birth": ["1980"],
+      "nationalities": ["Syria"],
+      "id_numbers": [{"type": "Passport", "number": "TP0000004", "country": "Syria"}],
+      "listed_on": "2019-09-09",
+      "remarks": "Fictional entry for testing."
+    },
+    {
+      "name": "Ahmed Fakeri",
+      "aliases": [],
+      "weak_aliases": [],
+      "names_original_script": [],
+      "list": "UN",
+      "list_id": "TEST-UN-2",
+      "program": "SAMPLE-PROGRAM",
+      "entity_type": "individual",
+      "dates_of_birth": ["1960..1962"],
+      "nationalities": ["Egypt"],
+      "id_numbers": [],
+      "listed_on": "2018-03-03",
+      "remarks": "Fictional entry for testing: a common-style name with a birth-year range."
+    },
+    {
+      "name": "Testa Fictiva Holdings Ltd",
+      "aliases": ["Testa Fictiva Holdings"],
+      "weak_aliases": [],
+      "names_original_script": [],
+      "list": "UN",
+      "list_id": "TEST-UN-3",
+      "program": "SAMPLE-PROGRAM",
+      "entity_type": "entity",
+      "dates_of_birth": [],
+      "nationalities": ["North Korea"],
+      "id_numbers": [],
+      "listed_on": "2020-11-20",
+      "remarks": "Fictional entry for testing."
+    },
+    {
+      "name": "Khalid Testani",
+      "aliases": ["Khaled Testani"],
+      "weak_aliases": [],
+      "names_original_script": ["\u062e\u0627\u0644\u062f \u062a\u0633\u062a\u0627\u0646\u064a"],
+      "list": "UAE_LOCAL",
+      "list_id": "TEST-UAE-1",
+      "program": "UAE Local Terrorist List",
+      "entity_type": "individual",
+      "dates_of_birth": ["1975-05-05"],
+      "nationalities": ["Yemen"],
+      "id_numbers": [{"type": "UAE Unified Number", "number": "TU0000007", "country": "United Arab Emirates"}],
+      "listed_on": "",
+      "remarks": "Fictional entry for testing."
+    }
+  ]
+}
