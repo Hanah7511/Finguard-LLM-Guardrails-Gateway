@@ -100,7 +100,7 @@ class OutputGuardrailPipeline:
                 None,
                 None,
             )
-        decision, result = self.check_grounding(source.text, claim, layer=layer, source_id=source.doc_id)
+        decision, result = self.check_grounding(source.grounding_text, claim, layer=layer, source_id=source.doc_id)
         return decision, result, source.doc_id
 
     def check_grounding(

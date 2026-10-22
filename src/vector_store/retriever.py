@@ -10,7 +10,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Protocol
+from typing import Optional, Protocol, Sequence
 
 import numpy as np
 
@@ -24,6 +24,22 @@ class RegulationDocument:
     title: str
     text: str
     aliases: tuple[str, ...] = field(default_factory=tuple)
+    # Parent section for subsection entries: "31 CFR 1020.320" for "31 CFR 1020.320(b)"
+    section: str = ""
+    section_id: str = ""
+    # Abbreviations the law itself defines, e.g. ("LFIs", "licensed financial institutions")
+    defined_terms: tuple[tuple[str, str], ...] = ()
+
+    @property
+    def grounding_text(self) -> str:
+        """The text with defined abbreviations spelled out, as a human reader would.
+
+        ``text`` stays the exact official wording; this is only what the NLI model reads.
+        """
+        text = self.text
+        for term, meaning in sorted(self.defined_terms, key=lambda tm: -len(tm[0])):
+            text = re.sub(r"\b" + re.escape(term) + r"\b", meaning, text)
+        return text
 
 
 class Embedder(Protocol):
@@ -52,6 +68,19 @@ def normalize_citation(citation: str) -> str:
     return re.sub(r"[^a-z0-9]", "", text)
 
 
+def _cites(key: str, doc_key: str) -> bool:
+    """True if the cited key contains doc_key as a whole citation.
+
+    A key ending in a number must not run on into more digits: "fatfrecommendation1"
+    is not cited by "fatfrecommendation15", but "31cfr1020320b" is by "31cfr1020320b3".
+    """
+    if not doc_key:
+        return False
+    if not doc_key[-1].isdigit():
+        return doc_key in key
+    return re.search(re.escape(doc_key) + r"(?!\d)", key) is not None
+
+
 class RegulationRetriever:
     def __init__(self, documents: list[RegulationDocument], embedder: Optional[Embedder] = None) -> None:
         if not documents:
@@ -63,21 +92,40 @@ class RegulationRetriever:
         self._citation_keys = [
             (normalize_citation(c), doc) for doc in documents for c in (doc.citation, *doc.aliases)
         ]
+        self._sections: dict[str, list[RegulationDocument]] = {}
+        for doc in documents:
+            if doc.section:
+                self._sections.setdefault(normalize_citation(doc.section), []).append(doc)
 
     @classmethod
-    def from_json(cls, path: Path, embedder: Optional[Embedder] = None) -> "RegulationRetriever":
-        raw = json.loads(Path(path).read_text(encoding="utf-8"))
-        docs = [
+    def from_json(
+        cls, path: Path, embedder: Optional[Embedder] = None, extra_paths: Sequence[Path] = ()
+    ) -> "RegulationRetriever":
+        """Load the main law store plus optional extra stores (skipped if missing)."""
+        docs = cls._load_documents(Path(path))
+        for extra in map(Path, extra_paths):
+            if extra.exists():
+                docs += cls._load_documents(extra)
+            else:
+                logger.info("optional law store %s not found; skipping", extra)
+        return cls(docs, embedder)
+
+    @staticmethod
+    def _load_documents(path: Path) -> list[RegulationDocument]:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        return [
             RegulationDocument(
                 doc_id=d["doc_id"],
                 citation=d["citation"],
                 title=d["title"],
                 text=d["text"],
                 aliases=tuple(d.get("aliases", [])),
+                section=d.get("section", ""),
+                section_id=d.get("section_id", ""),
+                defined_terms=tuple(d.get("defined_terms", {}).items()),
             )
             for d in raw["documents"]
         ]
-        return cls(docs, embedder)
 
     def find_by_citation(self, citation: str, min_similarity: float = 0.55) -> Optional[RegulationDocument]:
         """Exact citation match, else the nearest document if it is close enough."""
@@ -87,12 +135,30 @@ class RegulationRetriever:
             # specific document wins. A cited key shorter than the document's
             # (e.g. "31usc53") never matches: that would accept vague citations.
             for doc_key, doc in sorted(self._citation_keys, key=lambda kd: -len(kd[0])):
-                if doc_key and doc_key in key:
+                if _cites(key, doc_key):
                     return doc
+            # A whole section was cited ("31 CFR 1020.320") but it is stored as
+            # subsections: check against all of them joined together.
+            for section_key in sorted(self._sections, key=len, reverse=True):
+                if _cites(key, section_key):
+                    return self._merge_section(self._sections[section_key])
         hits = self.search(citation, k=1)
         if hits and hits[0][1] >= min_similarity:
             return hits[0][0]
         return None
+
+    @staticmethod
+    def _merge_section(parts: list[RegulationDocument]) -> RegulationDocument:
+        first = parts[0]
+        return RegulationDocument(
+            doc_id=first.section_id or first.doc_id,
+            citation=first.section,
+            title=first.title,
+            text="\n".join(p.text for p in parts),
+            section=first.section,
+            section_id=first.section_id,
+            defined_terms=tuple(dict(t for p in parts for t in p.defined_terms).items()),
+        )
 
     def search(self, query: str, k: int = 3) -> list[tuple[RegulationDocument, float]]:
         k = min(k, len(self.documents))

@@ -29,3 +29,7 @@ models/
 .idea/
 .DS_Store
 Thumbs.db
+
+#licensed / copyrighted legal texts: kept local, never committed in repo
+data/legal_sources/
+data/law_store/regulations_local.json

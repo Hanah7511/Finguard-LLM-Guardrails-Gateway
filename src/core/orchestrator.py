@@ -71,7 +71,7 @@ class Orchestrator:
         self.pii_detector = pii_detector or build_pii_detector(
             policy.input_guardrails, settings.pii_backend, settings.spacy_model
         )
-        self.retriever = retriever or RegulationRetriever.from_json(settings.regulations_path, embedder)
+        self.retriever = retriever or RegulationRetriever.from_json(settings.regulations_path, embedder, extra_paths=[settings.local_regulations_path])
         self.grounder = grounder or self._build_grounder(settings, embedder)
 
         self.input = InputGuardrailPipeline(policy, self.pii_detector, safety_model)

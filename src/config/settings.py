@@ -24,7 +24,9 @@ class Settings(BaseSettings):
     policy_dir: Path = PROJECT_ROOT / "src" / "config" / "policies"
 
     # Data
-    regulations_path: Path = PROJECT_ROOT / "data" / "sample_documents" / "regulations.json"
+    regulations_path: Path = PROJECT_ROOT / "data" / "law_store" / "regulations.json"
+    # Optional, gitignored: FATF/UAE/CBUAE text built by scripts/build_local_law_store.py
+    local_regulations_path: Path = PROJECT_ROOT / "data" / "law_store" / "regulations_local.json"
     sanctions_list_path: Path = PROJECT_ROOT / "data" / "sanctions" / "sample_sanctions_list.json"
     audit_log_path: Path = PROJECT_ROOT / "logs" / "audit.jsonl"
 
