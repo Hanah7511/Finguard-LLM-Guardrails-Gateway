@@ -83,7 +83,9 @@ class Orchestrator:
         self.output = OutputGuardrailPipeline(policy, self.grounder, self.retriever, self.pii_detector)
 
         s = policy.sanctions_screening
-        self.risk = RiskAssessor(policy.risk_assessment, s.high_risk_jurisdictions, self.version)
+        self.risk = RiskAssessor(
+            policy.risk_assessment, s.high_risk_jurisdictions, self.version, tuple(s.increased_monitoring_jurisdictions),
+        )
         self.sanctions = sanctions or self._load_sanctions(settings, s)
 
         self.cost_tracker = CostTracker()
@@ -114,7 +116,7 @@ class Orchestrator:
             )
             path, source = settings.sanctions_test_list_path, "test"
         return SanctionsScreener.from_json(
-            path, cfg.lists, cfg.fuzzy_match_threshold, cfg.high_risk_jurisdictions, source, cfg.use_identifiers
+            path, cfg.lists, cfg.fuzzy_match_threshold, cfg.high_risk_jurisdictions, source, cfg.use_identifiers, tuple(cfg.increased_monitoring_jurisdictions),
         )
 
     def _build_grounder(self, settings: Settings, embedder: Embedder) -> Grounder:

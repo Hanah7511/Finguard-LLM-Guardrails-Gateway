@@ -111,6 +111,8 @@ class RiskAssessmentPolicy(StrictModel):
     large_amount_threshold: float = Field(default=10000.0, gt=0)
     large_amount_weight: float = Field(default=0.10, ge=0.0, le=1.0)
     high_risk_country_weight: float = Field(default=0.20, ge=0.0, le=1.0)
+    monitored_country_weight: float = Field(default=0.0, ge=0.0, le=1.0)
+
     high_threshold: float = Field(default=0.70, ge=0.0, le=1.0)
     medium_threshold: float = Field(default=0.40, ge=0.0, le=1.0)
 
@@ -127,6 +129,8 @@ class SanctionsScreeningPolicy(StrictModel):
     lists: list[str] = Field(min_length=1)
     fuzzy_match_threshold: float = Field(default=0.85, ge=0.5, le=1.0)
     high_risk_jurisdictions: list[str] = Field(default_factory=list)
+    # FATF grey list: raises country risk to ELEVATED without forcing a review.
+    increased_monitoring_jurisdictions: list[str] = Field(default_factory=list)
     # Use date of birth / nationality / ID number to confirm or rule out a name match.
     # Off in v1.0.0 and v1.1.0 so their decisions stay reproducible; on from v1.2.0.
     use_identifiers: bool = False

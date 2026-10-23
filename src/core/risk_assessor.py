@@ -41,9 +41,10 @@ def _as_unit(value: Any) -> Optional[float]:
 class RiskAssessor:
     layer = "risk.assessment"
 
-    def __init__(self, policy: RiskAssessmentPolicy, high_risk_jurisdictions: list[str], policy_version: str) -> None:
+    def __init__(self, policy: RiskAssessmentPolicy, high_risk_jurisdictions: list[str], policy_version: str, monitored_jurisdictions: tuple[str, ...] = (),) -> None:
         self._policy = policy
         self._jurisdictions = {j.strip().lower() for j in high_risk_jurisdictions}
+        self._monitored = {j.strip().lower() for j in monitored_jurisdictions}
         self._policy_version = policy_version
 
     def assess(self, context: dict[str, Any], external_score: Optional[float] = None) -> RiskAssessment:
@@ -64,8 +65,11 @@ class RiskAssessor:
         if self._is_large(context.get("transaction_amount")):
             contributions["large_amount"] = self._policy.large_amount_weight
         country = context.get("country")
-        if isinstance(country, str) and country.strip().lower() in self._jurisdictions:
+        place = country.strip().lower() if isinstance(country, str) else ""
+        if place in self._jurisdictions:
             contributions["high_risk_country"] = self._policy.high_risk_country_weight
+        elif place in self._monitored and self._policy.monitored_country_weight > 0:
+            contributions["monitored_country"] = self._policy.monitored_country_weight
 
         own = round(min(1.0, sum(contributions.values())), 2)
         ext = round(max(0.0, min(1.0, external_score)), 2) if external_score is not None else None

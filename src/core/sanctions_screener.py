@@ -102,12 +102,14 @@ class SanctionsScreener:
         high_risk_jurisdictions: list[str],
         source: str = "",
         use_identifiers: bool = False,
+        monitored_jurisdictions: tuple[str, ...] = (),
     ) -> None:
         self.source = source  # which list file was loaded, e.g. "official" or "test"
         self._use_identifiers = use_identifiers
         self._lists = list(lists)
         self._threshold = fuzzy_threshold
         self._jurisdictions = {j.strip().lower() for j in high_risk_jurisdictions}
+        self._monitored = {j.strip().lower() for j in monitored_jurisdictions}
         self._index = [
             (entry, normalize_name(n))
             for entry in entries
@@ -129,6 +131,7 @@ class SanctionsScreener:
         high_risk: list[str],
         source: str = "",
         use_identifiers: bool = False,
+        monitored: tuple[str, ...] = (),
     ) -> "SanctionsScreener":
         raw = json.loads(Path(path).read_text(encoding="utf-8"))
         # Weak aliases and original-script (e.g. Arabic) names are kept in the file
@@ -151,7 +154,7 @@ class SanctionsScreener:
             )
             for e in raw["entries"]
         ]
-        return cls(entries, lists, fuzzy_threshold, high_risk, source, use_identifiers)
+        return cls(entries, lists, fuzzy_threshold, high_risk, source, use_identifiers, tuple(monitored))
 
     def _candidates(self, query: str) -> list[tuple[SanctionsEntry, str]]:
         """Index entries sharing enough letter-triples with the query to be worth comparing."""
@@ -221,7 +224,14 @@ class SanctionsScreener:
         exact = any(m.score == 1.0 for m in matches)
         country_risk = "UNKNOWN"
         if country:
-            country_risk = "HIGH" if country.strip().lower() in self._jurisdictions else "STANDARD"
+            place = country.strip().lower()
+            if place in self._jurisdictions:
+                country_risk = "HIGH"
+            elif place in self._monitored:
+                country_risk = "ELEVATED"
+            else:
+                country_risk = "STANDARD"
+            
 
         # Without identifiers an exact name blocks; with them, a name alone goes to review.
         confirmed = any(m.status == "confirmed" for m in matches)

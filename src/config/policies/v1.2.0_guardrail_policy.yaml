@@ -1,0 +1,162 @@
+# FinGuard guardrail policy. Edit values here, restart the service; no Python changes.
+# Validated at startup by src/config/policy_schema.py (unknown keys are rejected).
+
+policy_metadata:
+  version: "1.2.0"
+  effective_date: "2026-10-23"
+  approved_by: "compliance-team"
+  change_reason: "Screen the UAE Local Terrorist List, confirm name matches with identifiers, add the FATF grey list"
+  supersedes: "1.1.0"
+
+input_guardrails:
+  require_consent: true
+  max_query_chars: 4000
+  # Matched case-insensitively after Unicode/punctuation normalisation,
+  # anchored at a word start ("hide transaction" also matches "hide transactions").
+  injection_patterns:
+    - "ignore previous instructions"
+    - "ignore all previous instructions"
+    - "ignore the above instructions"
+    - "disregard your guidelines"
+    - "disregard previous instructions"
+    - "you are now"
+    - "pretend you are"
+    - "reveal your system prompt"
+    - "developer mode"
+  # Financial-harm intent. Phrased as intent ("help me launder") rather than topic
+  # ("launder") so analysts can still ask how laundering typologies work.
+  safety_patterns:
+    - "avoid aml detection"
+    - "evade aml"
+    - "bypass kyc"
+    - "get around kyc"
+    - "hide transaction"
+    - "hide the transaction"
+    - "hide my transaction"
+    - "help me launder"
+    - "how to launder"
+    - "how do i launder"
+    - "launder my"
+    - "evade compliance"
+    - "avoid reporting threshold"
+    - "avoid the reporting threshold"
+    - "avoid filing a ctr"
+    - "stay under the reporting"
+    - "structure my deposits"
+    - "evade sanctions"
+    - "avoid sanctions screening"
+  pii_entities:
+    - US_BANK_NUMBER
+    - IBAN_CODE
+    - US_SSN
+    - CREDIT_CARD
+  pii_score_threshold: 0.4
+  custom_pii_recognizers:
+    - entity_type: ACCOUNT_NUMBER
+      regex: "\\b\\d{10}\\b"
+      score: 0.85
+      context: ["account", "acct", "a/c"]
+  llama_guard:
+    enabled: false          # turn on once latency is measured on your hardware
+    model_id: "meta-llama/Llama-Guard-3-1B"
+    on_error: "block"
+
+tool_call_guardrails:
+  allowlist:
+    investigation_agent:
+      - transaction_lookup
+      - customer_history
+    compliance_agent:
+      - rag_retrieval
+      - sanctions_check
+    summarization_agent:
+      - report_template
+  parameter_rules:
+    transaction_lookup:
+      transaction_id: "^TXN-[0-9]{1,12}$"
+    customer_history:
+      customer_id: "^CUST-[0-9]{1,12}$"
+  max_parameter_chars: 500
+  max_result_chars: 20000
+  # Applied (with injection_patterns) to retrieved documents and tool results.
+  indirect_injection_patterns:
+    - "system prompt"
+    - "new instructions"
+    - "do not tell the user"
+    - "assistant must"
+    - "im_start"
+    - "begin system"
+    - "override the policy"
+
+output_guardrails:
+  grounding_method: "nli"
+  minimum_confidence: 0.85
+  entailment_threshold: 0.70
+  contradiction_threshold: 0.40
+  cosine_threshold: 0.75
+  max_retries: 2
+
+risk_assessment:
+  signal_weights:
+    structuring_flag: 0.40
+    velocity_score: 0.20
+    new_device_flag: 0.14
+    rapid_movement_flag: 0.20
+    pep_flag: 0.25
+    dormant_account_flag: 0.10
+    sanctions_country_flag: 0.30
+  large_amount_threshold: 10000
+  large_amount_weight: 0.10 
+  high_risk_country_weight: 0.20
+   # FATF grey list: a risk factor only, never a review on its own.
+  monitored_country_weight: 0.10
+  high_threshold: 0.70
+  medium_threshold: 0.40
+
+sanctions_screening:
+  # UAE_LOCAL is the UAE Local Terrorist List. EU is not screened: no EU list is loaded yet.
+  lists: ["OFAC", "UN", "UAE_LOCAL"]
+  fuzzy_match_threshold: 0.85
+  # A name match is confirmed or ruled out by date of birth / ID number.
+  use_identifiers: true
+  # FATF lists as published after the 19 June 2026 plenary. Review after every
+  # plenary (February, June, October); changes go into a new policy version.
+  # Black list: "high-risk jurisdictions subject to a call for action".
+  high_risk_jurisdictions:
+    - "north korea"
+    - "democratic people's republic of korea"
+    - "dprk"
+    - "iran"
+    - "myanmar"
+  # Grey list: "jurisdictions under increased monitoring". Common spellings included.
+  increased_monitoring_jurisdictions:
+    - "angola"
+    - "bolivia"
+    - "bosnia and herzegovina"
+    - "bulgaria"
+    - "cameroon"
+    - "cote d'ivoire"
+    - "c\u00f4te d'ivoire"
+    - "ivory coast"
+    - "democratic republic of the congo"
+    - "democratic republic of congo"
+    - "drc"
+    - "haiti"
+    - "iraq"
+    - "kenya"
+    - "kuwait"
+    - "laos"
+    - "lao pdr"
+    - "lebanon"
+    - "monaco"
+    - "nepal"
+    - "papua new guinea"
+    - "south sudan"
+    - "syria"
+    - "venezuela"
+    - "vietnam"
+    - "viet nam"
+    - "british virgin islands"
+    - "virgin islands (uk)"
+    - "yemen"
+ 

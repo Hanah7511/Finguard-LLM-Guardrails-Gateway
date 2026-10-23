@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 30.0
 
     # Policy
-    active_policy_version: str = "1.1.0"
+    active_policy_version: str = "1.2.0"
     policy_dir: Path = PROJECT_ROOT / "src" / "config" / "policies"
 
     # Data
