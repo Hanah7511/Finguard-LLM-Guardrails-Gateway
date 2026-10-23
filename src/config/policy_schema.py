@@ -127,6 +127,9 @@ class SanctionsScreeningPolicy(StrictModel):
     lists: list[str] = Field(min_length=1)
     fuzzy_match_threshold: float = Field(default=0.85, ge=0.5, le=1.0)
     high_risk_jurisdictions: list[str] = Field(default_factory=list)
+    # Use date of birth / nationality / ID number to confirm or rule out a name match.
+    # Off in v1.0.0 and v1.1.0 so their decisions stay reproducible; on from v1.2.0.
+    use_identifiers: bool = False
 
 
 class GuardrailPolicy(StrictModel):

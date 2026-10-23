@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections import Counter
 from functools import lru_cache
 from typing import Any, Optional
 
@@ -113,7 +114,7 @@ class Orchestrator:
             )
             path, source = settings.sanctions_test_list_path, "test"
         return SanctionsScreener.from_json(
-            path, cfg.lists, cfg.fuzzy_match_threshold, cfg.high_risk_jurisdictions, source
+            path, cfg.lists, cfg.fuzzy_match_threshold, cfg.high_risk_jurisdictions, source, cfg.use_identifiers
         )
 
     def _build_grounder(self, settings: Settings, embedder: Embedder) -> Grounder:
@@ -259,10 +260,12 @@ class Orchestrator:
         }
 
     def handle_sanctions_screen(
-        self, entity_name: str, country: Optional[str] = None, case_id: Optional[str] = None
+        self, entity_name: str, country: Optional[str] = None, case_id: Optional[str] = None, dob: Optional[str] = None, nationality: Optional[str] = None, id_number: Optional[str] = None,
     ) -> dict[str, Any]:
         """Tool 4. Exact + fuzzy screening against the configured lists."""
-        r = self.sanctions.screen(entity_name, country)
+        r = self.sanctions.screen(entity_name, country, dob, nationality, id_number)
+        supplied = [k for k, v in (("dob", dob), ("nationality", nationality), ("id", id_number)) if v]
+        statuses = Counter(m.status for m in r.matches if m.status)
         decision = GuardrailDecision(
             layer="compliance.sanctions",
             decision=_SANCTIONS_DECISIONS[r.recommendation],
@@ -270,6 +273,8 @@ class Orchestrator:
             reasoning_trace=(
                 f"matches={len(r.matches)} exact={r.exact_match} country_risk={r.country_risk} "
                 f"lists={','.join(r.checked_lists)}"
+                 # Which identifiers were supplied, never their values.
+                f"identifiers={','.join(supplied) or 'none'} statuses={dict(statuses)}"
             ),
             policy_version=self.version,
         )
@@ -281,7 +286,7 @@ class Orchestrator:
             "checked_lists": r.checked_lists,
             "list_source": self.sanctions.source,
             "matches": [
-                {"listed_name": m.name, "list": m.list_name, "program": m.program, "score": m.score}
+                {"listed_name": m.name, "list": m.list_name, "program": m.program, "score": m.score, "status": m.status, "reason": m.reason,}
                 for m in r.matches
             ],
             "country_risk": r.country_risk,
