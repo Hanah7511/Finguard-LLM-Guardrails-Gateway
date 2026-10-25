@@ -233,16 +233,15 @@ finguard-llm-guardrails-gateway/
 │   │   ├── server.py
 │   │   ├── schemas.py
 │   │   └── tools/                   # 8 MCP tools
-│   ├── api/                         # in progress
-│   │   ├── main.py
-│   │   ├── routes.py
-│   │   └── schemas.py
+│   ├── api/                         # FastAPI door
+│   │   ├── main.py                  # 6 endpoints, one per handle_*
+│   │   └── schemas.py               # request shapes (422 on bad input)
 │   └── monitoring/
 │       ├── telemetry.py
 │       ├── decision_logger.py
 │       └── cost_tracker.py
-├── test/                            # in progress
-│   └── unit/                        # fake GPT, fake NLI for cost-free tests
+├── test/
+│   └── unit/                        # cost-free tests: test sanctions list, no LLM, no audit file
 ├── data/
 │   ├── law_store/                   # official law texts, split by section
 │   ├── sanctions/                   # sanctions lists (fictional test list committed)
@@ -431,7 +430,7 @@ services:
 - [x] Official sanctions lists (UN, UAE Local, OFAC) with fast fuzzy screening
 - [x] Identifier matching (date of birth, ID number) and FATF black/grey-list country risk
 - [x] Sample alert set (12 fictional scenarios) with an expected-result runner
-- [ ] FastAPI door
+- [x] FastAPI door (`/health`, `/policy`, `/validate`, `/chat`, `/assess-risk`, `/sanctions-screen`) with 11 tests
 - [ ] MCP server (8 tools)
 - [ ] Tests + evals
 - [ ] PostgreSQL audit trail
