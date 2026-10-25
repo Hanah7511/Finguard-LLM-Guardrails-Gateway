@@ -95,7 +95,7 @@ Two-layer pipeline: fast regex pattern matching (Layer 1) + optional Llama Guard
 PII masked before it reaches the LLM, and scrubbed again from all audit logs. Consent flag enforced per request.
 
 ### Layer 6 — Compliance Guardrails
-NLI grounding against real regulatory text (BSA, FinCEN advisories). Versioned YAML policies with `approved_by` and `change_reason`. Append-only, PII-scrubbed audit trail (JSONL today, PostgreSQL planned) with policy version on every decision record.
+NLI grounding against official law texts (US BSA regulations; FATF Recommendations, UAE Federal Decree-Law No. 10 of 2025 and CBUAE guidance kept locally, see [Data Sources](#data-sources--regulatory-basis)). Sanctions screening against the UN, UAE Local Terrorist List and OFAC SDN lists, with FATF black- and grey-list country risk. Versioned YAML policies with `approved_by` and `change_reason`. Append-only, PII-scrubbed audit trail (JSONL today, PostgreSQL planned) with policy version on every decision record.
 
 ---
 
@@ -108,7 +108,7 @@ NLI grounding against real regulatory text (BSA, FinCEN advisories). Versioned Y
 | 01 | `finguard_assess_risk()` | Risk triage before any investigation starts. Scores alert signals against YAML weights. Returns: `LOW / MEDIUM / HIGH` |
 | 02 | `finguard_validate_tool_call()` | Authorizes or blocks an agent's tool request. Checks agent identity (from secret key) against YAML allowlist. No LLM call — fast. |
 | 03 | `finguard_pii_and_compliance_check()` | PII detection and reversible masking. Uses Presidio + regex fallback. Real values stored in FinGuard, not returned. |
-| 04 | `finguard_sanctions_screen()` | Entity and country screening against FinGuard's own sanctions list. Name variation matching. `transaction_type` check for CTR applicability (cash-only rule, planned). |
+| 04 | `finguard_sanctions_screen()` | Screens a person or company against the UN, UAE Local Terrorist List and OFAC SDN lists (exact + fuzzy names, aliases). Date of birth / ID number confirm or rule out a name match; a name alone goes to review. Country risk from the FATF black and grey lists. `transaction_type` check for CTR applicability (cash-only rule, planned). |
 | 05 | `finguard_validate_grounding()` | NLI hallucination check. Agent sends claim + citation reference only — FinGuard fetches the authoritative law text. Agent cannot supply a fake source. |
 | 06 | `finguard_get_policy_info()` | Returns active policy version, last change, `approved_by`, and applicable rules. Also available via `GET /policy`. |
 | 07 | `finguard_scan_documents()` | Scans RAG-retrieved documents for indirect prompt injection — hidden instructions embedded in regulatory text or case files. |
@@ -192,8 +192,9 @@ finguard-llm-guardrails-gateway/
 ├── src/
 │   ├── config/
 │   │   └── policies/
-│   │       ├── v1.0.0.yaml          # versioned policy (approved_by, change_reason)
-│   │       ├── v1.1.0.yaml
+│   │       ├── v1.0.0_guardrail_policy.yaml   # versioned policy (approved_by, change_reason)
+│   │       ├── v1.1.0_guardrail_policy.yaml
+│   │       ├── v1.2.0_guardrail_policy.yaml   # active
 │   │       └── CHANGELOG.md
 │   ├── core/
 │   │   ├── orchestrator.py          # THE BRAIN — one handle_* per job
@@ -243,11 +244,51 @@ finguard-llm-guardrails-gateway/
 ├── test/                            # in progress
 │   └── unit/                        # fake GPT, fake NLI for cost-free tests
 ├── data/
-│   └── sample_documents/            # law texts, sanctions list, sample alerts
+│   ├── law_store/                   # official law texts, split by section
+│   ├── sanctions/                   # sanctions lists (fictional test list committed)
+│   └── sample_alerts/               # fictional alerts: the upstream-engine contract
+├── scripts/
+│   ├── build_law_store.py           # US regulations from eCFR / govinfo
+│   ├── build_local_law_store.py     # FATF, UAE and CBUAE texts from local PDFs
+│   ├── build_sanctions_lists.py     # UN, UAE Local Terrorist List, OFAC SDN
+│   └── run_sample_alerts.py         # runs the sample alerts, compares with expected
 ├── Dockerfile
 ├── docker-compose.yml
 └── requirements.txt
 ```
+
+---
+
+## Data Sources & Regulatory Basis
+
+FinGuard checks against official sources, not text an agent supplies. Build scripts download or extract them into one format.
+
+| Data | Source | Built by | On GitHub? |
+|------|--------|----------|------------|
+| US regulations (31 CFR 1010.100, .230, .311, .313, .314, .410, 1020.320; 31 U.S.C. 5324) | eCFR API, govinfo US Code | `scripts/build_law_store.py` | ✅ public domain |
+| FATF Recommendations (R.1, 6, 10, 11, 12, 16, 19, 20, 24) | fatf-gafi.org PDF | `scripts/build_local_law_store.py` | ❌ copyrighted — kept local |
+| UAE Federal Decree-Law No. 10 of 2025 (Articles 1–42) | official PDF | `scripts/build_local_law_store.py` | ❌ kept local |
+| CBUAE Guidance on Transaction Monitoring and Sanctions Screening | CBUAE Rulebook PDF | `scripts/build_local_law_store.py` | ❌ kept local |
+| UN Security Council Consolidated List | scsanctions.un.org | `scripts/build_sanctions_lists.py` | ❌ large, changes daily — rebuild |
+| UAE Local Terrorist List | Executive Office (EOCN), uaeiec.gov.ae | `scripts/build_sanctions_lists.py` | ❌ rebuild |
+| OFAC SDN List | sanctionslistservice.ofac.treas.gov | `scripts/build_sanctions_lists.py` | ❌ rebuild |
+| Test sanctions list | **fictional** names, same format | hand-written | ✅ |
+| FATF black and grey lists (19 June 2026) | fatf-gafi.org | in the policy YAML | ✅ |
+
+Without the real sanctions file, FinGuard falls back to the fictional test list, logs a warning and marks every answer `"list_source": "test"`, so test screening is never mistaken for real screening.
+
+**Requirement → feature** (from the sources above):
+
+| Requirement | Source | FinGuard feature |
+|-------------|--------|------------------|
+| Screen against the UN Consolidated List and the UAE Local Terrorist List | CBUAE TM & Sanctions Screening Guidance, §1.3, §3.2 | Both lists built from the official files; screened under policy v1.2.0 |
+| Name screening before onboarding and at least daily | CBUAE TM & Sanctions Screening Guidance, §3.4.1 | Rebuild script for the lists; daily scheduling planned |
+| Use date of birth / nationality to tell a true match from a false match | CBUAE TM & Sanctions Screening Guidance, §3.4.1 | Identifier matching: confirmed / possible / ruled out, with a reason |
+| Freeze without delay for designated persons | FATF Recommendation 6 | Confirmed match → `block_and_escalate` |
+| Enhanced due diligence for countries the FATF calls for | FATF Recommendation 19 | Black list → review; grey list → higher risk score |
+| Identify beneficial owners of legal-entity customers | 31 CFR 1010.230, FATF Recommendation 10 | KYC/CDD tool (planned) |
+| Report cash transactions over $10,000 | 31 CFR 1010.311 | Cash-only CTR rule (planned) |
+| Suspicious activity reports must be accurate | 31 CFR 1020.320 | Tool 5: each claim checked against FinGuard's own copy of the cited law |
 
 ---
 
@@ -279,7 +320,7 @@ AGENT_KEY_COMPLIANCE=cmp-secret-...
 AGENT_KEY_SUMMARIZATION=sum-secret-...
 
 # Active policy version
-ACTIVE_POLICY_VERSION=1.1.0
+ACTIVE_POLICY_VERSION=1.2.0
 ```
 
 ### 3. Run FastAPI (standalone)
@@ -347,7 +388,8 @@ services:
 | Sanctions match recall | `sanctions_screen()` | Name variation testing: Mohammed / Muhammad / Mohamed |
 | Task success rate | Full MCP flow | Scripted fake-agent now; real finintel later |
 | Policy version coverage | All decisions | Must be 100% — automatic test, not a score |
-| Policy v1.0.0 vs v1.1.0 | Full eval suite | Run on both; compare results |
+| Policy v1.0.0 → v1.2.0 | Full eval suite | Run on every version; compare results |
+| Sample alert regression | `data/sample_alerts/alerts.json` | `python scripts/run_sample_alerts.py` — must stay 12/12 unless a policy change explains the difference |
 
 > ⚠️ **Confidence calibration is the biggest gap to close.** The confidence gate trusts the number GPT reports. If GPT says 0.9 but is only right 70% of the time at that score, the 0.85 gate means nothing. Measure with a calibration curve before reporting any threshold as meaningful.
 
@@ -381,10 +423,14 @@ services:
 **In active development.** Part of the Financial Risk Intelligence Platform portfolio.
 
 - [x] Architecture + design (dual-door, 6 guardrail layers, 8 MCP tools)
-- [x] Versioned YAML policy engine (v1.0.0, v1.1.0)
+- [x] Versioned YAML policy engine (v1.0.0, v1.1.0, v1.2.0 active)
 - [x] Guardrail modules for all 6 layers (input, tool-call, output, safety, privacy, compliance)
 - [x] Security model designed (5 properties) — implementation in progress
 - [x] `orchestrator.py` — single brain for both doors (one `handle_*` per job; risk score = higher of FinGuard and upstream engine score)
+- [x] Law store from official sources (US, FATF, UAE, CBUAE) with citation lookup and NLI grounding
+- [x] Official sanctions lists (UN, UAE Local, OFAC) with fast fuzzy screening
+- [x] Identifier matching (date of birth, ID number) and FATF black/grey-list country risk
+- [x] Sample alert set (12 fictional scenarios) with an expected-result runner
 - [ ] FastAPI door
 - [ ] MCP server (8 tools)
 - [ ] Tests + evals

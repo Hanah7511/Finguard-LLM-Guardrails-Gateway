@@ -1,0 +1,313 @@
+{
+  "_notice": "FICTIONAL sample alerts in the FinGuard alert contract: what an upstream detection engine sends. All names, IDs and cases are invented. 'expected' is FinGuard's answer under expected_policy_version, screened against the fictional test sanctions list. Run: python scripts/run_sample_alerts.py",
+  "_contract": {
+    "signals": "Values 0..1 (true/false count as 1/0). Signals without a weight in the active policy are returned in ignored_signals, never silently dropped.",
+    "transaction_amount": "USD equivalent, compared with risk_assessment.large_amount_threshold.",
+    "country": "Counterparty country, checked against the FATF lists in the policy.",
+    "external_risk_score": "The engine's own score (0..1) or null. FinGuard uses the higher of its own score and this one, and flags a large disagreement.",
+    "party": "Optional. The person or company screened against the sanctions lists."
+  },
+  "expected_policy_version": "1.2.0",
+  "alerts": [
+    {
+      "case_id": "CASE-2026-001",
+      "alert_id": "ALT-2026-001",
+      "scenario": "Ten cash deposits just under the reporting threshold within 24 hours",
+      "typology": "structuring (smurfing)",
+      "query": "Review ALT-2026-001: ten cash deposits of 9,500 within 24 hours",
+      "transaction_type": "cash",
+      "signals": {
+        "structuring_flag": 1,
+        "velocity_score": 0.9,
+        "new_device_flag": 1,
+        "transaction_amount": 9500,
+        "country": "United Arab Emirates"
+      },
+      "external_risk_score": 0.91,
+      "expected": {
+        "risk_level": "HIGH",
+        "risk_score": 0.91,
+        "own_score": 0.72,
+        "scores_disagree": false,
+        "ignored_signals": []
+      }
+    },
+    {
+      "case_id": "CASE-2026-002",
+      "alert_id": "ALT-2026-002",
+      "scenario": "Card payment slightly above the customer's usual spending",
+      "typology": "none (false alarm)",
+      "query": "Review ALT-2026-002: card payment slightly above usual spending",
+      "transaction_type": "card",
+      "signals": {
+        "velocity_score": 0.2,
+        "transaction_amount": 450,
+        "country": "United Kingdom"
+      },
+      "external_risk_score": null,
+      "expected": {
+        "risk_level": "LOW",
+        "risk_score": 0.04,
+        "own_score": 0.04,
+        "scores_disagree": false,
+        "ignored_signals": []
+      }
+    },
+    {
+      "case_id": "CASE-2026-003",
+      "alert_id": "ALT-2026-003",
+      "scenario": "Large wire from a politically exposed person's dormant account",
+      "typology": "PEP / dormant account reactivation",
+      "query": "Review ALT-2026-003: large wire from a dormant PEP account",
+      "transaction_type": "wire",
+      "signals": {
+        "pep_flag": 1,
+        "dormant_account_flag": 1,
+        "transaction_amount": 48000,
+        "country": "United Kingdom"
+      },
+      "external_risk_score": null,
+      "expected": {
+        "risk_level": "MEDIUM",
+        "risk_score": 0.45,
+        "own_score": 0.45,
+        "scores_disagree": false,
+        "ignored_signals": []
+      }
+    },
+    {
+      "case_id": "CASE-2026-004",
+      "alert_id": "ALT-2026-004",
+      "scenario": "Funds moved on quickly to a counterparty in a FATF black-list country",
+      "typology": "high-risk jurisdiction",
+      "query": "Review ALT-2026-004: rapid onward transfer to a high-risk jurisdiction",
+      "transaction_type": "wire",
+      "signals": {
+        "rapid_movement_flag": 1,
+        "sanctions_country_flag": 1,
+        "transaction_amount": 7200,
+        "country": "Iran"
+      },
+      "external_risk_score": null,
+      "expected": {
+        "risk_level": "HIGH",
+        "risk_score": 0.7,
+        "own_score": 0.7,
+        "scores_disagree": false,
+        "ignored_signals": []
+      }
+    },
+    {
+      "case_id": "CASE-2026-005",
+      "alert_id": "ALT-2026-005",
+      "scenario": "Same pattern as ALT-2026-004, but to a FATF grey-list country",
+      "typology": "monitored jurisdiction",
+      "query": "Review ALT-2026-005: rapid onward transfer to a grey-list jurisdiction",
+      "transaction_type": "wire",
+      "signals": {
+        "rapid_movement_flag": 1,
+        "transaction_amount": 7200,
+        "country": "Kenya"
+      },
+      "external_risk_score": null,
+      "expected": {
+        "risk_level": "LOW",
+        "risk_score": 0.3,
+        "own_score": 0.3,
+        "scores_disagree": false,
+        "ignored_signals": []
+      }
+    },
+    {
+      "case_id": "CASE-2026-006",
+      "alert_id": "ALT-2026-006",
+      "scenario": "Trading company: money in and straight out, round amounts, no salaries or rent",
+      "typology": "shell company",
+      "query": "Review ALT-2026-006: pass-through activity on a trading company account",
+      "transaction_type": "wire",
+      "signals": {
+        "pass_through_flag": 1,
+        "round_amount_flag": 1,
+        "no_operating_expenses_flag": 1,
+        "velocity_score": 0.6,
+        "transaction_amount": 250000,
+        "country": "United Arab Emirates"
+      },
+      "external_risk_score": 0.78,
+      "party": {
+        "name": "Fictiva Trading FZE"
+      },
+      "expected": {
+        "risk_level": "HIGH",
+        "risk_score": 0.78,
+        "own_score": 0.22,
+        "scores_disagree": true,
+        "ignored_signals": [
+          "no_operating_expenses_flag",
+          "pass_through_flag",
+          "round_amount_flag"
+        ],
+        "sanctions": "clear",
+        "country_risk": "STANDARD"
+      }
+    },
+    {
+      "case_id": "CASE-2026-007",
+      "alert_id": "ALT-2026-007",
+      "scenario": "Seven accounts linked by one device and one address, funds collected into one account",
+      "typology": "money mule network",
+      "query": "Review ALT-2026-007: accounts linked by a shared device and address",
+      "transaction_type": "transfer",
+      "signals": {
+        "network_risk_flag": 1,
+        "new_device_flag": 1,
+        "velocity_score": 0.7,
+        "transaction_amount": 3000,
+        "country": "United Arab Emirates"
+      },
+      "external_risk_score": 0.66,
+      "expected": {
+        "risk_level": "MEDIUM",
+        "risk_score": 0.66,
+        "own_score": 0.28,
+        "scores_disagree": true,
+        "ignored_signals": [
+          "network_risk_flag"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-2026-008",
+      "alert_id": "ALT-2026-008",
+      "scenario": "Offshore company buys a Dubai villa, about AED 2M paid in cash",
+      "typology": "real estate (offshore ownership)",
+      "query": "Review ALT-2026-008: property purchase paid in cash by an offshore company",
+      "transaction_type": "cash",
+      "signals": {
+        "round_amount_flag": 1,
+        "transaction_amount": 545000,
+        "country": "British Virgin Islands"
+      },
+      "external_risk_score": null,
+      "party": {
+        "name": "Fictiva Seaview Holdings Ltd"
+      },
+      "known_gap": "Scores LOW under v1.2.0: no weight for round_amount_flag yet and no rule for cash property purchases (UAE REAR report, cash of AED 55,000 or more). Both are planned.",
+      "expected": {
+        "risk_level": "LOW",
+        "risk_score": 0.2,
+        "own_score": 0.2,
+        "scores_disagree": false,
+        "ignored_signals": [
+          "round_amount_flag"
+        ],
+        "sanctions": "clear",
+        "country_risk": "ELEVATED"
+      }
+    },
+    {
+      "case_id": "CASE-2026-009",
+      "alert_id": "ALT-2026-009",
+      "scenario": "Several fast transfers to a crypto exchange right after deposits",
+      "typology": "virtual assets",
+      "query": "Review ALT-2026-009: rapid transfers to a virtual asset exchange",
+      "transaction_type": "transfer",
+      "signals": {
+        "rapid_movement_flag": 1,
+        "crypto_counterparty_flag": 1,
+        "velocity_score": 0.8,
+        "transaction_amount": 15000,
+        "country": "United Arab Emirates"
+      },
+      "external_risk_score": null,
+      "expected": {
+        "risk_level": "MEDIUM",
+        "risk_score": 0.46,
+        "own_score": 0.46,
+        "scores_disagree": false,
+        "ignored_signals": [
+          "crypto_counterparty_flag"
+        ]
+      }
+    },
+    {
+      "case_id": "CASE-2026-010",
+      "alert_id": "ALT-2026-010",
+      "scenario": "New customer shares a name with a sanctioned person, but has a different date of birth",
+      "typology": "sanctions false alarm",
+      "query": "Review ALT-2026-010: onboarding screening for a new customer",
+      "transaction_type": "onboarding",
+      "signals": {
+        "new_device_flag": 1,
+        "transaction_amount": 500,
+        "country": "Canada"
+      },
+      "external_risk_score": null,
+      "party": {
+        "name": "Viktor Sampleov",
+        "dob": "1990-01-01",
+        "nationality": "Canada"
+      },
+      "expected": {
+        "risk_level": "LOW",
+        "risk_score": 0.14,
+        "own_score": 0.14,
+        "scores_disagree": false,
+        "ignored_signals": [],
+        "sanctions": "clear",
+        "country_risk": "STANDARD"
+      }
+    },
+    {
+      "case_id": "CASE-2026-011",
+      "alert_id": "ALT-2026-011",
+      "scenario": "Payment beneficiary matches a listed person on name and full date of birth",
+      "typology": "sanctions true match",
+      "query": "Review ALT-2026-011: payment to a beneficiary flagged by screening",
+      "transaction_type": "wire",
+      "signals": {
+        "transaction_amount": 4000,
+        "country": "Yemen"
+      },
+      "external_risk_score": null,
+      "party": {
+        "name": "Khalid Testani",
+        "dob": "1975-05-05",
+        "nationality": "Yemen"
+      },
+      "expected": {
+        "risk_level": "LOW",
+        "risk_score": 0.1,
+        "own_score": 0.1,
+        "scores_disagree": false,
+        "ignored_signals": [],
+        "sanctions": "block_and_escalate",
+        "country_risk": "ELEVATED"
+      }
+    },
+    {
+      "case_id": "CASE-2026-012",
+      "alert_id": "ALT-2026-012",
+      "scenario": "Same account used from two cities hundreds of kilometres apart within ten minutes",
+      "typology": "account takeover or shared mule account",
+      "query": "Review ALT-2026-012: logins from distant locations within minutes",
+      "transaction_type": "transfer",
+      "signals": {
+        "location_anomaly_flag": 1,
+        "new_device_flag": 1,
+        "transaction_amount": 2000,
+        "country": "United Arab Emirates"
+      },
+      "external_risk_score": null,
+      "expected": {
+        "risk_level": "LOW",
+        "risk_score": 0.14,
+        "own_score": 0.14,
+        "scores_disagree": false,
+        "ignored_signals": [
+          "location_anomaly_flag"
+        ]
+      }
+    }
+  ]
+}
