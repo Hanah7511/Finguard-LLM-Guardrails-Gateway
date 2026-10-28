@@ -101,7 +101,7 @@ NLI grounding against official law texts (US BSA regulations; FATF Recommendatio
 
 ## MCP Tools (8)
 
-*MCP server in progress — the guardrail logic behind Tools 1–7 is implemented.* All tools take a `case_id` to link calls into one audit trail per case. Agent authentication via secret key (not self-reported name) is planned.
+*Tools 1–7 are live in `src/mcp_server/server.py`; Tool 8 is planned (Step 6).* All tools take a `case_id` to link calls into one audit trail per case. Each tool's description is written for the agent: when to call it and what to do with the answer. Agent authentication via secret key (not self-reported name) is planned; until then Tool 2 trusts the agent name it is given.
 
 | # | Tool | Description |
 |---|------|-------------|
@@ -229,10 +229,8 @@ finguard-llm-guardrails-gateway/
 │   │   └── prompts.py
 │   ├── vector_store/
 │   │   └── retriever.py             # FinGuard's own law store: citation lookup → FAISS (NumPy fallback)
-│   ├── mcp_server/                  # in progress
-│   │   ├── server.py
-│   │   ├── schemas.py
-│   │   └── tools/                   # 8 MCP tools
+│   ├── mcp_server/                  # MCP door
+│   │   └── server.py                # 7 tools (Tool 8 planned), one per handle_*
 │   ├── api/                         # FastAPI door
 │   │   ├── main.py                  # 6 endpoints, one per handle_*
 │   │   └── schemas.py               # request shapes (422 on bad input)
@@ -338,6 +336,13 @@ curl http://localhost:8000/metrics   # planned
 python -m src.mcp_server.server
 ```
 
+With the default `MCP_TRANSPORT=stdio` the server prints nothing and waits: an MCP client (an agent) starts it and talks to it over stdin/stdout. Set `MCP_TRANSPORT=streamable-http` to serve it on port 8001 instead.
+
+```bash
+# Tests for both doors (no LLM, fictional sanctions list, no audit file)
+python -m pytest test -v
+```
+
 ### 5. Docker
 
 ```bash
@@ -431,7 +436,8 @@ services:
 - [x] Identifier matching (date of birth, ID number) and FATF black/grey-list country risk
 - [x] Sample alert set (12 fictional scenarios) with an expected-result runner
 - [x] FastAPI door (`/health`, `/policy`, `/validate`, `/chat`, `/assess-risk`, `/sanctions-screen`) with 11 tests
-- [ ] MCP server (8 tools)
+- [x] MCP server: Tools 1–7 over stdio or streamable HTTP, with 9 tests (in-memory MCP client, fake NLI)
+- [ ] Tool 8 `finguard_finalize_check` + per-agent secret keys
 - [ ] Tests + evals
 - [ ] PostgreSQL audit trail
 - [ ] `/metrics` endpoint

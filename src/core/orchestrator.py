@@ -274,7 +274,7 @@ class Orchestrator:
             # The screened name is personal data: record the outcome, never the name.
             reasoning_trace=(
                 f"matches={len(r.matches)} exact={r.exact_match} country_risk={r.country_risk} "
-                f"lists={','.join(r.checked_lists)}"
+                f"lists={','.join(r.checked_lists)} "
                  # Which identifiers were supplied, never their values.
                 f"identifiers={','.join(supplied) or 'none'} statuses={dict(statuses)}"
             ),
