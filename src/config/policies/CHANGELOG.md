@@ -3,7 +3,20 @@
 Every policy change gets a new versioned file, an entry here and a git commit.
 Old versions stay in place: reports record the version they were validated under.
 
-## 1.2.0 — 2026-10-23 (active)
+## 1.3.0 — 2026-10-29 (active)
+Approved by: compliance-team
+
+- `sanctions_screening.ownership_rule` (OFAC 50% rule): a company owned 50% or more, in total, by
+  blocked persons is blocked even if its own name is on no list. The caller sends the owners
+  (Tool 4 `owners`); a blocked company counts in full in the companies it owns. A listed owner
+  below the threshold sends the case to review.
+- `sanctions_screening.clear_requires_verified_identifiers: true`. A different date of birth / ID
+  clears an exact name match only when the caller says it was verified (`identifiers_verified`);
+  otherwise the match stays `possible` and goes to review. Fuzzy matches are still cleared.
+- `pii_entities`: added `EMAIL_ADDRESS`. Emails are also scrubbed from the audit log.
+- FATF lists unchanged: checked 29 October 2026, the October 2026 plenary outcomes are not yet published.
+
+## 1.2.0 — 2026-10-23
 Approved by: compliance-team
 
 - `sanctions_screening.lists`: `["OFAC", "UN", "EU"]` → `["OFAC", "UN", "UAE_LOCAL"]`. The UAE Local

@@ -77,7 +77,12 @@ def assess_risk(req: AssessRiskRequest, orch: Orchestrator = Depends(get_orchest
 
 @app.post("/sanctions-screen")
 def sanctions_screen(req: SanctionsScreenRequest, orch: Orchestrator = Depends(get_orchestrator)) -> dict[str, Any]:
-    """Tool 4 over HTTP. Screen one person or company."""
-    return orch.handle_sanctions_screen(
-        req.entity_name, req.country, req.case_id, req.dob, req.nationality, req.id_number
-    )
+    """Tool 4 over HTTP. Screen one person or company, and a company's owners if given."""
+    owners = [o.model_dump() for o in req.owners] if req.owners else None
+    try:
+        return orch.handle_sanctions_screen(
+            req.entity_name, req.country, req.case_id, req.dob, req.nationality, req.id_number, owners,
+            req.identifiers_verified,
+        )
+    except ValueError as exc:  # e.g. owners adding up to more than 100%
+        raise HTTPException(status_code=422, detail=str(exc)) from exc

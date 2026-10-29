@@ -15,11 +15,13 @@ from __future__ import annotations
 from typing import Annotated, Any, Optional
 
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp_types import ToolAnnotations
 from pydantic import BaseModel, Field
 
 from src.config.settings import get_settings
 from src.core.orchestrator import Orchestrator, get_orchestrator
+from src.core.ownership import Owner
 
 CaseId = Annotated[
     Optional[str],
@@ -85,12 +87,22 @@ def create_server(orchestrator: Optional[Orchestrator] = None) -> MCPServer:
         dob: Annotated[Optional[str], Field(description="Date of birth, YYYY-MM-DD or YYYY. Helps rule out a false match.")] = None,
         nationality: Annotated[Optional[str], Field(description="Nationality, if known.")] = None,
         id_number: Annotated[Optional[str], Field(description="Passport or national ID number, if known.")] = None,
+        identifiers_verified: Annotated[bool, Field(description="True only if the date of birth / ID were checked against an official document (KYC). An unverified date of birth cannot clear an exact name match.")] = False,
+        owners: Annotated[Optional[list[Owner]], Field(description="For a company: its owners and their % from KYC records. FinGuard screens each one and applies the 50% ownership rule.")] = None,
         case_id: CaseId = None,
     ) -> dict[str, Any]:
         """Tool 4. Screen a person or company against the UN, UAE Local and OFAC sanctions lists,
         with FATF country risk. Send date of birth or ID number when known: a name alone can only
-        give escalate_for_review. block_and_escalate means stop and hand the case to a human."""
-        return orch.handle_sanctions_screen(entity_name, country, case_id, dob, nationality, id_number)
+        give escalate_for_review. For a company, send its owners: one owned 50% or more by
+        sanctioned persons is blocked even if its own name is on no list.
+        block_and_escalate means stop and hand the case to a human."""
+        try:
+            return orch.handle_sanctions_screen(
+                entity_name, country, case_id, dob, nationality, id_number,
+                [o.model_dump() for o in owners] if owners else None, identifiers_verified,
+            )
+        except ValueError as exc:  # e.g. owners adding up to more than 100%: tell the agent why
+            raise ToolError(str(exc)) from exc
 
     @mcp.tool(annotations=_CHECK)
     def finguard_validate_grounding(

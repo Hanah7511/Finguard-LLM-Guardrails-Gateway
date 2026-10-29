@@ -13,7 +13,10 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from src.config.policy_schema import SanctionsScreeningPolicy
 
 # A candidate must share this share of the query's letter-triples before the (slow)
 # full comparison runs. Benchmarked on the full OFAC list: same matches as comparing
@@ -103,9 +106,11 @@ class SanctionsScreener:
         source: str = "",
         use_identifiers: bool = False,
         monitored_jurisdictions: tuple[str, ...] = (),
+        clear_requires_verified: bool = False,
     ) -> None:
         self.source = source  # which list file was loaded, e.g. "official" or "test"
         self._use_identifiers = use_identifiers
+        self._clear_requires_verified = clear_requires_verified
         self._lists = list(lists)
         self._threshold = fuzzy_threshold
         self._jurisdictions = {j.strip().lower() for j in high_risk_jurisdictions}
@@ -132,6 +137,7 @@ class SanctionsScreener:
         source: str = "",
         use_identifiers: bool = False,
         monitored: tuple[str, ...] = (),
+        clear_requires_verified: bool = False,
     ) -> "SanctionsScreener":
         raw = json.loads(Path(path).read_text(encoding="utf-8"))
         # Weak aliases and original-script (e.g. Arabic) names are kept in the file
@@ -154,7 +160,15 @@ class SanctionsScreener:
             )
             for e in raw["entries"]
         ]
-        return cls(entries, lists, fuzzy_threshold, high_risk, source, use_identifiers, tuple(monitored))
+        return cls(entries, lists, fuzzy_threshold, high_risk, source, use_identifiers, tuple(monitored), clear_requires_verified)
+
+    @classmethod
+    def from_policy(cls, path: Path, cfg: "SanctionsScreeningPolicy", source: str = "") -> "SanctionsScreener":
+        """Load a list file with every screening setting taken from the policy."""
+        return cls.from_json(
+            path, cfg.lists, cfg.fuzzy_match_threshold, cfg.high_risk_jurisdictions, source,
+            cfg.use_identifiers, tuple(cfg.increased_monitoring_jurisdictions), cfg.clear_requires_verified_identifiers,
+        )
 
     def _candidates(self, query: str) -> list[tuple[SanctionsEntry, str]]:
         """Index entries sharing enough letter-triples with the query to be worth comparing."""
@@ -200,8 +214,10 @@ class SanctionsScreener:
         dob: Optional[str] = None,
         nationality: Optional[str] = None,
         id_number: Optional[str] = None,
+        identifiers_verified: bool = False,
     ) -> SanctionsResult:
-        """dob is "YYYY-MM-DD" (or "YYYY" if only the year is known)."""
+        """dob is "YYYY-MM-DD" (or "YYYY" if only the year is known). identifiers_verified
+        means the DOB / ID were checked against an official document (KYC)."""
         query = normalize_name(entity_name)
         best: dict[tuple[str, str], tuple[SanctionsEntry, SanctionsMatch]] = {}
         best_score = 0.0
@@ -219,6 +235,9 @@ class SanctionsScreener:
         if self._use_identifiers:
             for entry, m in ranked:
                 m.status, m.reason = self._check_identifiers(entry, m.score, dob, nationality, id_number)
+                # A faked date of birth must not clear someone whose exact name is listed.
+                if m.status == "ruled_out" and m.score == 1.0 and self._clear_requires_verified and not identifiers_verified:
+                    m.status, m.reason = "possible", m.reason + ", but it is not verified; an exact name match is only cleared on verified identifiers"
         matches = [m for _, m in ranked]
         active = [m for m in matches if m.status != "ruled_out"]
         exact = any(m.score == 1.0 for m in matches)

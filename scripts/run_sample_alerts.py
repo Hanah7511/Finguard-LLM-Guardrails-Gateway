@@ -46,6 +46,7 @@ def run_alert(orch: Orchestrator, alert: dict) -> dict:
             dob=party.get("dob"),
             nationality=party.get("nationality"),
             id_number=party.get("id_number"),
+            identifiers_verified=party.get("identifiers_verified", False),
         )
         result["sanctions"] = screen["recommendation"]
         result["country_risk"] = screen["country_risk"]
@@ -61,16 +62,7 @@ def main() -> int:
         print(f"Active policy is {policy.version}, but 'expected' was written for "
               f"{data['expected_policy_version']}. Differences are expected.")
 
-    s = policy.sanctions_screening
-    test_list = SanctionsScreener.from_json(
-        settings.sanctions_test_list_path,
-        s.lists,
-        s.fuzzy_match_threshold,
-        s.high_risk_jurisdictions,
-        "test",
-        s.use_identifiers,
-        tuple(s.increased_monitoring_jurisdictions),
-    )
+    test_list = SanctionsScreener.from_policy(settings.sanctions_test_list_path, policy.sanctions_screening, "test")
     orch = Orchestrator(policy, settings, sanctions=test_list, audit=DecisionLogger(None))
 
     failures = 0

@@ -5,9 +5,9 @@
     "transaction_amount": "USD equivalent, compared with risk_assessment.large_amount_threshold.",
     "country": "Counterparty country, checked against the FATF lists in the policy.",
     "external_risk_score": "The engine's own score (0..1) or null. FinGuard uses the higher of its own score and this one, and flags a large disagreement.",
-    "party": "Optional. The person or company screened against the sanctions lists."
+    "party": "Optional. The person or company screened against the sanctions lists. identifiers_verified: true only if the DOB / ID were checked against an official document."
   },
-  "expected_policy_version": "1.2.0",
+  "expected_policy_version": "1.3.0",
   "alerts": [
     {
       "case_id": "CASE-2026-001",
@@ -246,7 +246,8 @@
       "party": {
         "name": "Viktor Sampleov",
         "dob": "1990-01-01",
-        "nationality": "Canada"
+        "nationality": "Canada",
+        "identifiers_verified": true
       },
       "expected": {
         "risk_level": "LOW",

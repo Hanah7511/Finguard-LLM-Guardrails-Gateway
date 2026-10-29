@@ -125,6 +125,15 @@ class RiskAssessmentPolicy(StrictModel):
         return self
 
 
+class OwnershipRulePolicy(StrictModel):
+    # OFAC 50% rule. Off before v1.3.0 so older decisions stay reproducible.
+    enabled: bool = False
+    threshold_percent: float = Field(default=50.0, gt=0, le=100)
+    # True: "50% or more" (OFAC). False: "more than 50%" (EU).
+    inclusive: bool = True
+    max_depth: int = Field(default=5, ge=1, le=10)
+
+
 class SanctionsScreeningPolicy(StrictModel):
     lists: list[str] = Field(min_length=1)
     fuzzy_match_threshold: float = Field(default=0.85, ge=0.5, le=1.0)
@@ -134,6 +143,9 @@ class SanctionsScreeningPolicy(StrictModel):
     # Use date of birth / nationality / ID number to confirm or rule out a name match.
     # Off in v1.0.0 and v1.1.0 so their decisions stay reproducible; on from v1.2.0.
     use_identifiers: bool = False
+    # An exact name match is cleared by a different DOB / ID only if they were verified (KYC).
+    clear_requires_verified_identifiers: bool = False
+    ownership_rule: OwnershipRulePolicy = Field(default_factory=OwnershipRulePolicy)
 
 
 class GuardrailPolicy(StrictModel):

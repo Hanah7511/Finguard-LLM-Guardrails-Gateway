@@ -92,7 +92,7 @@ LLM responses validated in three stages:
 Two-layer pipeline: fast regex pattern matching (Layer 1) + optional Llama Guard 1B for nuanced harm classification (Layer 2). Each runs independently.
 
 ### Layer 5 — Privacy Guardrails
-PII masked before it reaches the LLM, and scrubbed again from all audit logs. Consent flag enforced per request.
+PII (bank and card numbers, IBANs, SSNs, emails) masked before it reaches the LLM, and scrubbed again from all audit logs. Consent flag enforced per request.
 
 ### Layer 6 — Compliance Guardrails
 NLI grounding against official law texts (US BSA regulations; FATF Recommendations, UAE Federal Decree-Law No. 10 of 2025 and CBUAE guidance kept locally, see [Data Sources](#data-sources--regulatory-basis)). Sanctions screening against the UN, UAE Local Terrorist List and OFAC SDN lists, with FATF black- and grey-list country risk. Versioned YAML policies with `approved_by` and `change_reason`. Append-only, PII-scrubbed audit trail (JSONL today, PostgreSQL planned) with policy version on every decision record.
@@ -108,7 +108,7 @@ NLI grounding against official law texts (US BSA regulations; FATF Recommendatio
 | 01 | `finguard_assess_risk()` | Risk triage before any investigation starts. Scores alert signals against YAML weights. Returns: `LOW / MEDIUM / HIGH` |
 | 02 | `finguard_validate_tool_call()` | Authorizes or blocks an agent's tool request. Checks agent identity (from secret key) against YAML allowlist. No LLM call — fast. |
 | 03 | `finguard_pii_and_compliance_check()` | PII detection and reversible masking. Uses Presidio + regex fallback. Real values stored in FinGuard, not returned. |
-| 04 | `finguard_sanctions_screen()` | Screens a person or company against the UN, UAE Local Terrorist List and OFAC SDN lists (exact + fuzzy names, aliases). Date of birth / ID number confirm or rule out a name match; a name alone goes to review. Country risk from the FATF black and grey lists. `transaction_type` check for CTR applicability (cash-only rule, planned). |
+| 04 | `finguard_sanctions_screen()` | Screens a person or company against the UN, UAE Local Terrorist List and OFAC SDN lists (exact + fuzzy names, aliases). Date of birth / ID number confirm or rule out a name match; a name alone goes to review, and an exact name match is only cleared on identifiers marked `identifiers_verified` (KYC). For a company, `owners` applies the OFAC 50% rule (sanctioned owners' shares added up, through chains of companies). Country risk from the FATF black and grey lists. `transaction_type` check for CTR applicability (cash-only rule, planned). |
 | 05 | `finguard_validate_grounding()` | NLI hallucination check. Agent sends claim + citation reference only — FinGuard fetches the authoritative law text. Agent cannot supply a fake source. |
 | 06 | `finguard_get_policy_info()` | Returns active policy version, last change, `approved_by`, and applicable rules. Also available via `GET /policy`. |
 | 07 | `finguard_scan_documents()` | Scans RAG-retrieved documents for indirect prompt injection — hidden instructions embedded in regulatory text or case files. |
@@ -194,11 +194,13 @@ finguard-llm-guardrails-gateway/
 │   │   └── policies/
 │   │       ├── v1.0.0_guardrail_policy.yaml   # versioned policy (approved_by, change_reason)
 │   │       ├── v1.1.0_guardrail_policy.yaml
-│   │       ├── v1.2.0_guardrail_policy.yaml   # active
+│   │       ├── v1.2.0_guardrail_policy.yaml
+│   │       ├── v1.3.0_guardrail_policy.yaml   # active
 │   │       └── CHANGELOG.md
 │   ├── core/
 │   │   ├── orchestrator.py          # THE BRAIN — one handle_* per job
 │   │   ├── guardrail_pipeline.py
+│   │   ├── ownership.py             # OFAC 50% ownership rule
 │   │   ├── risk_assessor.py
 │   │   └── sanctions_screener.py
 │   ├── input_guardrails/
@@ -278,11 +280,12 @@ Without the real sanctions file, FinGuard falls back to the fictional test list,
 
 | Requirement | Source | FinGuard feature |
 |-------------|--------|------------------|
-| Screen against the UN Consolidated List and the UAE Local Terrorist List | CBUAE TM & Sanctions Screening Guidance, §1.3, §3.2 | Both lists built from the official files; screened under policy v1.2.0 |
+| Screen against the UN Consolidated List and the UAE Local Terrorist List | CBUAE TM & Sanctions Screening Guidance, §1.3, §3.2 | Both lists built from the official files; screened from policy v1.2.0 |
 | Name screening before onboarding and at least daily | CBUAE TM & Sanctions Screening Guidance, §3.4.1 | Rebuild script for the lists; daily scheduling planned |
 | Use date of birth / nationality to tell a true match from a false match | CBUAE TM & Sanctions Screening Guidance, §3.4.1 | Identifier matching: confirmed / possible / ruled out, with a reason |
 | Freeze without delay for designated persons | FATF Recommendation 6 | Confirmed match → `block_and_escalate` |
 | Enhanced due diligence for countries the FATF calls for | FATF Recommendation 19 | Black list → review; grey list → higher risk score |
+| Entities owned 50% or more by blocked persons are blocked too | OFAC Revised Guidance on Entity Property and Interests in Property (2014) | Tool 4 `owners`: ownership rule, threshold in the policy YAML |
 | Identify beneficial owners of legal-entity customers | 31 CFR 1010.230, FATF Recommendation 10 | KYC/CDD tool (planned) |
 | Report cash transactions over $10,000 | 31 CFR 1010.311 | Cash-only CTR rule (planned) |
 | Suspicious activity reports must be accurate | 31 CFR 1020.320 | Tool 5: each claim checked against FinGuard's own copy of the cited law |
@@ -317,7 +320,7 @@ AGENT_KEY_COMPLIANCE=cmp-secret-...
 AGENT_KEY_SUMMARIZATION=sum-secret-...
 
 # Active policy version
-ACTIVE_POLICY_VERSION=1.2.0
+ACTIVE_POLICY_VERSION=1.3.0
 ```
 
 ### 3. Run FastAPI (standalone)
@@ -392,7 +395,7 @@ services:
 | Sanctions match recall | `sanctions_screen()` | Name variation testing: Mohammed / Muhammad / Mohamed |
 | Task success rate | Full MCP flow | Scripted fake-agent now; real finintel later |
 | Policy version coverage | All decisions | Must be 100% — automatic test, not a score |
-| Policy v1.0.0 → v1.2.0 | Full eval suite | Run on every version; compare results |
+| Policy v1.0.0 → v1.3.0 | Full eval suite | Run on every version; compare results |
 | Sample alert regression | `data/sample_alerts/alerts.json` | `python scripts/run_sample_alerts.py` — must stay 12/12 unless a policy change explains the difference |
 
 > ⚠️ **Confidence calibration is the biggest gap to close.** The confidence gate trusts the number GPT reports. If GPT says 0.9 but is only right 70% of the time at that score, the 0.85 gate means nothing. Measure with a calibration curve before reporting any threshold as meaningful.
@@ -427,7 +430,7 @@ services:
 **In active development.** Part of the Financial Risk Intelligence Platform portfolio.
 
 - [x] Architecture + design (dual-door, 6 guardrail layers, 8 MCP tools)
-- [x] Versioned YAML policy engine (v1.0.0, v1.1.0, v1.2.0 active)
+- [x] Versioned YAML policy engine (v1.0.0 – v1.2.0, v1.3.0 active)
 - [x] Guardrail modules for all 6 layers (input, tool-call, output, safety, privacy, compliance)
 - [x] Security model designed (5 properties) — implementation in progress
 - [x] `orchestrator.py` — single brain for both doors (one `handle_*` per job; risk score = higher of FinGuard and upstream engine score)
@@ -435,12 +438,23 @@ services:
 - [x] Official sanctions lists (UN, UAE Local, OFAC) with fast fuzzy screening
 - [x] Identifier matching (date of birth, ID number) and FATF black/grey-list country risk
 - [x] Sample alert set (12 fictional scenarios) with an expected-result runner
-- [x] FastAPI door (`/health`, `/policy`, `/validate`, `/chat`, `/assess-risk`, `/sanctions-screen`) with 11 tests
-- [x] MCP server: Tools 1–7 over stdio or streamable HTTP, with 9 tests (in-memory MCP client, fake NLI)
+- [x] FastAPI door (`/health`, `/policy`, `/validate`, `/chat`, `/assess-risk`, `/sanctions-screen`) with 13 tests
+- [x] MCP server: Tools 1–7 over stdio or streamable HTTP, with 10 tests (in-memory MCP client, fake NLI)
 - [ ] Tool 8 `finguard_finalize_check` + per-agent secret keys
 - [ ] Tests + evals
 - [ ] PostgreSQL audit trail
 - [ ] `/metrics` endpoint
+
+**Planned extras (after the core):**
+
+- [ ] Tool 9 KYC/CDD check (records whether identifiers were verified, beneficial owners, company age)
+- [x] OFAC 50% ownership rule (caller sends owners and %; sanctioned shares are added up; threshold per jurisdiction in YAML)
+- [ ] PEP screening (result `edd_required`, not a block; real PEP data stays local, fictional test list committed)
+- [x] Unverified identifiers can't clear an exact name match (stops a faked date of birth clearing a real hit)
+- [ ] SAR fact grounding against case evidence
+- [ ] Sanctions transliteration / phonetic matching
+- [ ] One policy file per jurisdiction (UAE, UK, EU)
+- [ ] `docs/SECURITY.md` (OWASP LLM Top 10 mapping)
 
 ---
 

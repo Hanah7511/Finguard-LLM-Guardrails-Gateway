@@ -41,11 +41,7 @@ class FakeGrounder(Grounder):
 def server():
     settings = get_settings().model_copy(update={"openai_api_key": None})
     policy = get_policy()
-    s = policy.sanctions_screening
-    test_list = SanctionsScreener.from_json(
-        settings.sanctions_test_list_path, s.lists, s.fuzzy_match_threshold, s.high_risk_jurisdictions,
-        "test", s.use_identifiers, tuple(s.increased_monitoring_jurisdictions),
-    )
+    test_list = SanctionsScreener.from_policy(settings.sanctions_test_list_path, policy.sanctions_screening, "test")
     return create_server(Orchestrator(policy, settings, sanctions=test_list, grounder=FakeGrounder(), audit=DecisionLogger(None)))
 
 
@@ -97,6 +93,15 @@ def test_pii_is_masked(server):
 def test_sanctions_true_match_blocked(server):
     r = call(server, "finguard_sanctions_screen", {"entity_name": "Khalid Testani", "dob": "1975-05-05"})
     assert r.structured_content["recommendation"] == "block_and_escalate"
+
+
+def test_owners_over_100_percent_explains_the_error(server):
+    r = call(server, "finguard_sanctions_screen", {
+        "entity_name": "Fictiva Ventures FZE",
+        "owners": [{"name": "Clara Openfield", "percent": 80}, {"name": "Omar Brightwater", "percent": 30}],
+    })
+    assert r.is_error
+    assert "more than 100%" in r.content[0].text
 
 
 def test_grounding_uses_finguards_own_law_text(server):

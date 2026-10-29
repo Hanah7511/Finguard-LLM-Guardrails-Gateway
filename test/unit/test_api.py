@@ -26,11 +26,7 @@ ALERTS = json.loads((PROJECT_ROOT / "data" / "sample_alerts" / "alerts.json").re
 def client():
     settings = get_settings().model_copy(update={"openai_api_key": None})
     policy = get_policy()
-    s = policy.sanctions_screening
-    test_list = SanctionsScreener.from_json(
-        settings.sanctions_test_list_path, s.lists, s.fuzzy_match_threshold, s.high_risk_jurisdictions,
-        "test", s.use_identifiers, tuple(s.increased_monitoring_jurisdictions),
-    )
+    test_list = SanctionsScreener.from_policy(settings.sanctions_test_list_path, policy.sanctions_screening, "test")
     orch = Orchestrator(policy, settings, sanctions=test_list, audit=DecisionLogger(None))
     app.dependency_overrides[get_orchestrator] = lambda: orch
     # Not used as a context manager, so the startup step (real orchestrator) is skipped.
@@ -95,10 +91,24 @@ def test_assess_risk_rejects_score_out_of_range(client):
     assert client.post("/assess-risk", json=a).status_code == 422
 
 
-def test_sanctions_false_alarm_cleared_by_dob(client):
-    body = client.post("/sanctions-screen", json={"entity_name": "Viktor Sampleov", "dob": "1990-01-01"}).json()
+def test_sanctions_false_alarm_cleared_by_verified_dob(client):
+    body = client.post("/sanctions-screen", json={
+        "entity_name": "Viktor Sampleov", "dob": "1990-01-01", "identifiers_verified": True,
+    }).json()
     assert body["recommendation"] == "clear"
     assert body["list_source"] == "test"
+
+
+def test_unverified_dob_cannot_clear_exact_name(client):
+    # Same listed name, different DOB, but nobody checked the DOB: it could be fake.
+    body = client.post("/sanctions-screen", json={"entity_name": "Viktor Sampleov", "dob": "1990-01-01"}).json()
+    assert body["recommendation"] == "escalate_for_review"
+    assert "not verified" in body["matches"][0]["reason"]
+
+
+def test_email_is_masked(client):
+    body = client.post("/validate", json={"text": "Customer email is jane.doe@example.com"}).json()
+    assert body["masked_text"] == "Customer email is [EMAIL_ADDRESS]"
 
 
 def test_sanctions_true_match_blocked(client):

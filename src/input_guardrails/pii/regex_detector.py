@@ -56,6 +56,9 @@ BUILTIN_RULES: dict[str, _Rule] = {
     "IBAN_CODE": _Rule(
         "IBAN_CODE", re.compile(r"\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]){11,30}\b"), 0.9, validator=iban_valid
     ),
+    "EMAIL_ADDRESS": _Rule(
+        "EMAIL_ADDRESS", re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"), 0.9
+    ),
     "US_BANK_NUMBER": _Rule(
         "US_BANK_NUMBER",
         re.compile(r"\b\d{8,17}\b"),
@@ -95,8 +98,8 @@ class RegexPIIDetector(PIIDetector):
 
 
 def build_log_scrubber() -> Callable[[str], str]:
-    """Masks SSNs, cards and IBANs anywhere in a log string, plus long digit runs."""
-    detector = RegexPIIDetector(["US_SSN", "CREDIT_CARD", "IBAN_CODE"])
+    """Masks SSNs, cards, IBANs and emails anywhere in a log string, plus long digit runs."""
+    detector = RegexPIIDetector(["US_SSN", "CREDIT_CARD", "IBAN_CODE", "EMAIL_ADDRESS"])
     long_digits = re.compile(r"\b\d{9,19}\b")
 
     def scrub(value: str) -> str:

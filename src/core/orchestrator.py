@@ -17,6 +17,7 @@ from src.config.policy_loader import get_policy
 from src.config.policy_schema import GuardrailPolicy, SanctionsScreeningPolicy
 from src.config.settings import Settings, get_settings
 from src.core.guardrail_pipeline import GuardrailPipeline
+from src.core.ownership import OwnerResult, OwnershipChecker
 from src.core.risk_assessor import RiskAssessor
 from src.core.sanctions_screener import SanctionsScreener
 from src.input_guardrails.pii.base import PIIDetector
@@ -47,6 +48,14 @@ _SANCTIONS_DECISIONS = {
     "escalate_for_review": Decision.ESCALATE,
     "block_and_escalate": Decision.BLOCK,
 }
+_SEVERITY = list(_SANCTIONS_DECISIONS)  # clear < escalate_for_review < block_and_escalate
+
+
+def _owner_out(o: OwnerResult) -> dict[str, Any]:
+    return {
+        "name": o.name, "percent": o.percent, "status": o.status, "reason": o.reason,
+        "listed_name": o.listed_name, "list": o.list_name, "owners": [_owner_out(x) for x in o.owners],
+    }
 
 
 def new_request_id() -> str:
@@ -87,6 +96,7 @@ class Orchestrator:
             policy.risk_assessment, s.high_risk_jurisdictions, self.version, tuple(s.increased_monitoring_jurisdictions),
         )
         self.sanctions = sanctions or self._load_sanctions(settings, s)
+        self.ownership = OwnershipChecker(self.sanctions, s.ownership_rule)
 
         self.cost_tracker = CostTracker()
         self.audit = audit or DecisionLogger(settings.audit_log_path, build_log_scrubber())
@@ -115,9 +125,7 @@ class Orchestrator:
                 "Run scripts/build_sanctions_lists.py.", path
             )
             path, source = settings.sanctions_test_list_path, "test"
-        return SanctionsScreener.from_json(
-            path, cfg.lists, cfg.fuzzy_match_threshold, cfg.high_risk_jurisdictions, source, cfg.use_identifiers, tuple(cfg.increased_monitoring_jurisdictions),
-        )
+        return SanctionsScreener.from_policy(path, cfg, source)
 
     def _build_grounder(self, settings: Settings, embedder: Embedder) -> Grounder:
         cfg = self.policy.output_guardrails
@@ -263,24 +271,44 @@ class Orchestrator:
 
     def handle_sanctions_screen(
         self, entity_name: str, country: Optional[str] = None, case_id: Optional[str] = None, dob: Optional[str] = None, nationality: Optional[str] = None, id_number: Optional[str] = None,
+        owners: Optional[list[dict[str, Any]]] = None, identifiers_verified: bool = False,
     ) -> dict[str, Any]:
-        """Tool 4. Exact + fuzzy screening against the configured lists."""
-        r = self.sanctions.screen(entity_name, country, dob, nationality, id_number)
+        """Tool 4. Exact + fuzzy screening against the configured lists, then the
+        ownership rule when owners are given. Raises ValueError for impossible shares."""
+        r = self.sanctions.screen(entity_name, country, dob, nationality, id_number, identifiers_verified)
+        recommendation, ownership, trace = r.recommendation, None, ""
+        if owners:
+            self.ownership.validate(owners)
+        if owners and self.policy.sanctions_screening.ownership_rule.enabled:
+            o = self.ownership.check(owners)
+            # The stricter of the company's own result and its ownership result wins.
+            recommendation = max(r.recommendation, o.recommendation, key=_SEVERITY.index)
+            ownership = {
+                "applied": True,
+                "blocked_share": o.blocked_share,
+                "possible_share": o.possible_share,
+                "recommendation": o.recommendation,
+                "reason": o.reason,
+                "owners": [_owner_out(x) for x in o.owners],
+            }
+            trace = f" owners_screened={o.owners_screened} blocked_share={o.blocked_share:g} possible_share={o.possible_share:g}"
+        elif owners:
+            ownership = {"applied": False, "reason": f"the ownership rule is off in policy {self.version}"}
         supplied = [k for k, v in (("dob", dob), ("nationality", nationality), ("id", id_number)) if v]
         statuses = Counter(m.status for m in r.matches if m.status)
         decision = GuardrailDecision(
             layer="compliance.sanctions",
-            decision=_SANCTIONS_DECISIONS[r.recommendation],
+            decision=_SANCTIONS_DECISIONS[recommendation],
             # The screened name is personal data: record the outcome, never the name.
             reasoning_trace=(
                 f"matches={len(r.matches)} exact={r.exact_match} country_risk={r.country_risk} "
                 f"lists={','.join(r.checked_lists)} "
                  # Which identifiers were supplied, never their values.
-                f"identifiers={','.join(supplied) or 'none'} statuses={dict(statuses)}"
+                f"identifiers={','.join(supplied) or 'none'} verified={identifiers_verified} statuses={dict(statuses)}{trace}"
             ),
             policy_version=self.version,
         )
-        request_id = self._audit("sanctions_screen", [decision], case_id, recommendation=r.recommendation)
+        request_id = self._audit("sanctions_screen", [decision], case_id, recommendation=recommendation)
         return {
             "request_id": request_id,
             "match_found": r.match_found,
@@ -292,8 +320,10 @@ class Orchestrator:
                 for m in r.matches
             ],
             "country_risk": r.country_risk,
-            "recommendation": r.recommendation,
+            "recommendation": recommendation,
+            # Confidence is for the name screen of the entity itself, not its owners.
             "confidence": r.confidence,
+            "ownership": ownership,
             "policy_version": self.version,
         }
 

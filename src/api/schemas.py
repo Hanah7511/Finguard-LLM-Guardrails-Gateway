@@ -9,6 +9,8 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
+from src.core.ownership import Owner
+
 
 class CaseRequest(BaseModel):
     # Links every audit record for one case across projects.
@@ -41,3 +43,7 @@ class SanctionsScreenRequest(CaseRequest):
     dob: Optional[str] = Field(default=None, max_length=20, examples=["1990-01-01"])
     nationality: Optional[str] = Field(default=None, max_length=100)
     id_number: Optional[str] = Field(default=None, max_length=50)
+    # True only if the DOB / ID were checked against an official document (KYC).
+    identifiers_verified: bool = False
+    # For a company: its owners from KYC records, for the 50% ownership rule.
+    owners: Optional[list[Owner]] = Field(default=None, examples=[[{"name": "Khalid Testani", "percent": 30, "dob": "1975-05-05"}]])
