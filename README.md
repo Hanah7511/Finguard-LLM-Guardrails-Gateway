@@ -250,7 +250,8 @@ finguard-llm-guardrails-gateway/
 │   ├── build_law_store.py           # US regulations from eCFR / govinfo
 │   ├── build_local_law_store.py     # FATF, UAE and CBUAE texts from local PDFs
 │   ├── build_sanctions_lists.py     # UN, UAE Local Terrorist List, OFAC SDN
-│   └── run_sample_alerts.py         # runs the sample alerts, compares with expected
+│   ├── run_sample_alerts.py         # runs the sample alerts, compares with expected
+│   └── fake_agent.py                # scripted stand-in for finintel's 3 agents (MCP client)
 ├── Dockerfile
 ├── docker-compose.yml
 └── requirements.txt
@@ -344,7 +345,13 @@ With the default `MCP_TRANSPORT=stdio` the server prints nothing and waits: an M
 ```bash
 # Tests for both doors (no LLM, fictional sanctions list, no audit file)
 python -m pytest test -v
+
+# A scripted agent runs all 12 sample alerts through the MCP tools (real NLI model)
+python scripts/fake_agent.py
+python scripts/fake_agent.py --rogue ALT-2026-001   # agents misbehave on purpose
 ```
+
+The fake agent plays finintel's investigation, compliance and summarization agents and obeys FinGuard's answers: 6 reports ready for review, 5 alerts closed as low risk, 1 sanctions hit escalated (ALT-2026-011: low risk, but a confirmed match, so parties are screened at every risk level). In `--rogue` mode FinGuard refuses the out-of-role tool call and holds the report with a false legal claim.
 
 ### 5. Docker
 
@@ -396,6 +403,7 @@ services:
 | Task success rate | Full MCP flow | Scripted fake-agent now; real finintel later |
 | Policy version coverage | All decisions | Must be 100% — automatic test, not a score |
 | Policy v1.0.0 → v1.3.0 | Full eval suite | Run on every version; compare results |
+| End-to-end agent run | `scripts/fake_agent.py` (12 alerts, `--rogue`) | Task success: every investigation reaches the expected outcome; rogue calls refused |
 | Sample alert regression | `data/sample_alerts/alerts.json` | `python scripts/run_sample_alerts.py` — must stay 12/12 unless a policy change explains the difference |
 
 > ⚠️ **Confidence calibration is the biggest gap to close.** The confidence gate trusts the number GPT reports. If GPT says 0.9 but is only right 70% of the time at that score, the 0.85 gate means nothing. Measure with a calibration curve before reporting any threshold as meaningful.
@@ -440,6 +448,7 @@ services:
 - [x] Sample alert set (12 fictional scenarios) with an expected-result runner
 - [x] FastAPI door (`/health`, `/policy`, `/validate`, `/chat`, `/assess-risk`, `/sanctions-screen`) with 13 tests
 - [x] MCP server: Tools 1–7 over stdio or streamable HTTP, with 10 tests (in-memory MCP client, fake NLI)
+- [x] Fake agent: scripted stand-in for finintel runs all 12 alerts end to end over MCP, with a `--rogue` mode (3 tests)
 - [ ] Tool 8 `finguard_finalize_check` + per-agent secret keys
 - [ ] Tests + evals
 - [ ] PostgreSQL audit trail
