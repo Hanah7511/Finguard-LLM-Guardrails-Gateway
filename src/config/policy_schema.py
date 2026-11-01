@@ -75,6 +75,8 @@ class ToolCallGuardrailsPolicy(StrictModel):
     max_parameter_chars: int = Field(default=500, gt=0)
     # Agents prove who they are with their own secret key (AGENT_KEY_* in .env). Off before v1.4.0.
     require_agent_keys: bool = False
+    # Tool 3 masks as per-case tokens ([IBAN_CODE_1]) that Tool 8 can restore. Off before v1.5.0.
+    reversible_masking: bool = False
     max_result_chars: int = Field(default=20000, gt=0)
     indirect_injection_patterns: PatternList = Field(default_factory=list)
 
@@ -161,6 +163,15 @@ class SanctionsScreeningPolicy(StrictModel):
     ownership_rule: OwnershipRulePolicy = Field(default_factory=OwnershipRulePolicy)
 
 
+class FinalizeCheckPolicy(StrictModel):
+    # Tool 8, the last gate before human review. Off before v1.5.0.
+    enabled: bool = False
+    allowed_agents: list[str] = Field(default_factory=list)
+    required_steps: list[Literal["risk_assessed", "claims_grounded", "no_sanctions_block", "no_refused_calls"]] = Field(
+        default_factory=lambda: ["risk_assessed", "claims_grounded", "no_sanctions_block", "no_refused_calls"]
+    )
+
+
 class GuardrailPolicy(StrictModel):
     policy_metadata: PolicyMetadata
     input_guardrails: InputGuardrailsPolicy
@@ -168,6 +179,19 @@ class GuardrailPolicy(StrictModel):
     output_guardrails: OutputGuardrailsPolicy
     risk_assessment: RiskAssessmentPolicy
     sanctions_screening: SanctionsScreeningPolicy
+    finalize_check: FinalizeCheckPolicy = Field(default_factory=FinalizeCheckPolicy)
+
+    @model_validator(mode="after")
+    def _finalize_needs_keys_and_tokens(self) -> "GuardrailPolicy":
+        cfg, tools = self.finalize_check, self.tool_call_guardrails
+        if cfg.enabled:
+            # Tool 8 hands back real values, so it must know who is calling and have tokens to restore.
+            if not (tools.require_agent_keys and tools.reversible_masking):
+                raise ValueError("finalize_check needs require_agent_keys and reversible_masking")
+            unknown = set(cfg.allowed_agents) - set(tools.allowlist)
+            if unknown or not cfg.allowed_agents or not cfg.required_steps:
+                raise ValueError(f"finalize_check needs known allowed_agents and required_steps; unknown: {sorted(unknown)}")
+        return self
 
     @property
     def version(self) -> str:

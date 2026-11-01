@@ -7,7 +7,7 @@
     "external_risk_score": "The engine's own score (0..1) or null. FinGuard uses the higher of its own score and this one, and flags a large disagreement.",
     "party": "Optional. The person or company screened against the sanctions lists. identifiers_verified: true only if the DOB / ID were checked against an official document."
   },
-  "expected_policy_version": "1.4.0",
+  "expected_policy_version": "1.5.0",
   "alerts": [
     {
       "case_id": "CASE-2026-001",

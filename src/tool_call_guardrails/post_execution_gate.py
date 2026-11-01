@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Callable, Optional
 
 from src.input_guardrails.pii.base import PIIDetector
 from src.monitoring.telemetry import Decision, GuardrailDecision, Stopwatch
@@ -29,7 +30,7 @@ class PostExecutionGate:
         self._max_chars = max_result_chars
         self._policy_version = policy_version
 
-    def check(self, result_text: str) -> PostExecutionResult:
+    def check(self, result_text: str, token_for: Optional[Callable[[str, str], str]] = None) -> PostExecutionResult:
         decisions: list[GuardrailDecision] = []
 
         too_long = len(result_text) > self._max_chars
@@ -45,7 +46,7 @@ class PostExecutionGate:
         # Always mask, even if the result is then rejected: the masked text is what
         # callers may log or show to an analyst.
         sw = Stopwatch()
-        pii = self._pii.mask(result_text)
+        pii = self._pii.mask(result_text, token_for)
         decisions.append(
             GuardrailDecision(
                 layer="tool.post_execution.pii",

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from src.config.policy_schema import GuardrailPolicy
 from src.input_guardrails.patterns import PatternMatcher
@@ -62,8 +62,8 @@ class ToolCallGuardrailPipeline:
             return ToolCallValidation(False, params.reasoning_trace, decisions, verified_agent=verified)
         return ToolCallValidation(True, "within_allowlist", decisions, verified_agent=verified)
 
-    def validate_result(self, result_text: str) -> PostExecutionResult:
-        return self.post_gate.check(result_text)
+    def validate_result(self, result_text: str, token_for: Optional[Callable[[str, str], str]] = None) -> PostExecutionResult:
+        return self.post_gate.check(result_text, token_for)
 
     def scan_documents(self, documents: list[str]) -> ScanResult:
         return self.scanner.scan(documents)

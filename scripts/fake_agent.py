@@ -71,6 +71,7 @@ class Investigation:
     steps: list[str] = field(default_factory=list)
     refused: int = 0  # tool calls FinGuard refused
     ctr_required: bool = False  # a cash report is due whatever the outcome: it is a duty, not suspicion
+    final_report: str = ""  # real values restored by Tool 8: for human review, never back into an LLM
 
     def log(self, agent: str, text: str) -> None:
         self.steps.append(f"  [{agent}] {text}")
@@ -175,7 +176,18 @@ async def investigate(alert: dict[str, Any], call: Call, rogue: bool = False) ->
         claims.append(FALSE_CLAIM)
     grounding = await call("finguard_validate_grounding", {"claims": claims, **case})
     inv.log("summarization", f"validate_grounding -> {grounding['verdict']} ({len(claims)} claims, {len(notes)} notes)")
-    inv.outcome = READY if grounding["safe_to_finalize"] else HELD
+
+    # 7. The last gate. FinGuard decides from its own record of the case, even if a rogue agent asks anyway.
+    report = " ".join([f"Draft report for {alert['case_id']}.", *notes, *(c["claim"] for c in claims)])
+    final = await call("finguard_finalize_check", {
+        "agent_name": "summarization_agent", "report_text": report,
+        "agent_key": KEYS["summarization_agent"], **case,
+    })
+    inv.log("summarization", f"finalize_check -> approved={final['approved']} missing={final['missing']} "
+                             f"values restored={final['tokens_restored']}")
+    if final["approved"]:
+        inv.final_report = final["report_text"]
+    inv.outcome = READY if final["approved"] else HELD
     return inv
 
 

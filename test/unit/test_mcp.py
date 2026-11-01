@@ -25,7 +25,7 @@ ALERTS = json.loads((PROJECT_ROOT / "data" / "sample_alerts" / "alerts.json").re
 TOOLS = {
     "finguard_assess_risk", "finguard_validate_tool_call", "finguard_pii_and_compliance_check",
     "finguard_sanctions_screen", "finguard_validate_grounding", "finguard_get_policy_info",
-    "finguard_scan_documents",
+    "finguard_scan_documents", "finguard_finalize_check",
 }
 # Made-up test keys, not real secrets. FinGuard is given the same ones.
 KEYS = {"investigation_agent": "test-key-investigation-0001", "summarization_agent": "test-key-summarization-0003"}

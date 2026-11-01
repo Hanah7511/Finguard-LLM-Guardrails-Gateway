@@ -3,7 +3,18 @@
 Every policy change gets a new versioned file, an entry here and a git commit.
 Old versions stay in place: reports record the version they were validated under.
 
-## 1.4.0 — 2026-10-31 (active)
+## 1.5.0 — 2026-11-01 (active)
+Approved by: compliance-team
+
+- `tool_call_guardrails.reversible_masking: true`. With a `case_id`, Tool 3 masks values as per-case tokens
+  (`[IBAN_CODE_1]`). The same value gets the same token within a case. Real values are held in memory only
+  and never logged. Without a `case_id`, values are masked for good, as before.
+- `finalize_check`: new Tool 8 `finguard_finalize_check`, the last gate before human review. It needs the
+  agent's key, an agent in `allowed_agents`, and every `required_steps` item met on FinGuard's own record of
+  the case. Approved: the report comes back with real values restored. Refused: `missing` says why and the
+  report stays masked. A report using a token the case never issued is refused too.
+
+## 1.4.0 — 2026-10-31
 Approved by: compliance-team
 
 - `tool_call_guardrails.require_agent_keys: true`. Tool 2 refuses a call unless it carries the secret key

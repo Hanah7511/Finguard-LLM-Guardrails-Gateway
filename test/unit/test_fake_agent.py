@@ -57,9 +57,18 @@ def test_poisoned_case_file_is_dropped(server):
     assert any("flagged [1]" in step for step in inv.steps)
 
 
-def test_rogue_agent_is_refused_and_false_claim_holds_the_report(server):
-    results = outcomes(server, rogue=True)
+def test_ready_report_has_the_real_values_back():
+    inv = outcomes(build_server(FakeGrounder()))["ALT-2026-001"]
+    assert inv.outcome == READY
+    assert "GB82 WEST 1234 5698 7654 32" in inv.final_report
+    assert "[IBAN_CODE_1]" not in inv.final_report
+
+
+def test_rogue_agent_is_refused_and_false_claim_holds_the_report():
+    # Its own server: refused calls stay on a case's record for good.
+    results = outcomes(build_server(FakeGrounder()), rogue=True)
     assert all(inv.refused >= 1 for inv in results.values())
     assert results["ALT-2026-001"].outcome == HELD
     assert results["ALT-2026-011"].outcome == SANCTIONS_HIT
+    assert results["ALT-2026-001"].final_report == ""
 

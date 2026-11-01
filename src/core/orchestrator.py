@@ -16,8 +16,10 @@ from typing import Any, Mapping, Optional
 from src.config.policy_loader import get_policy
 from src.config.policy_schema import GuardrailPolicy, SanctionsScreeningPolicy
 from src.config.settings import Settings, get_settings
+from src.core.case_tracker import CaseTracker
 from src.core.guardrail_pipeline import GuardrailPipeline
 from src.core.ownership import OwnerResult, OwnershipChecker
+from src.core.pii_vault import PIIVault
 from src.core.risk_assessor import RiskAssessor
 from src.core.sanctions_screener import SanctionsScreener
 from src.input_guardrails.pii.base import PIIDetector
@@ -92,6 +94,9 @@ class Orchestrator:
         self.input = InputGuardrailPipeline(policy, self.pii_detector, safety_model)
         self.tools = ToolCallGuardrailPipeline(policy, self.pii_detector, self._build_identity(policy, agent_keys))
         self.output = OutputGuardrailPipeline(policy, self.grounder, self.retriever, self.pii_detector)
+        i = policy.input_guardrails
+        self.vault = PIIVault([*i.pii_entities, *(r.entity_type for r in i.custom_pii_recognizers)])
+        self.cases = CaseTracker()
 
         s = policy.sanctions_screening
         self.risk = RiskAssessor(
@@ -227,6 +232,7 @@ class Orchestrator:
             decision = check.check(query)
             decisions.append(decision)
             if decision.stops_pipeline:
+                self.cases.call_refused(case_id)
                 request_id = self._audit("assess_risk", decisions, case_id, risk_level="HIGH")
                 return {
                     "request_id": request_id,
@@ -239,6 +245,7 @@ class Orchestrator:
 
         assessment = self.risk.assess(signals, external_risk_score, transaction_type)
         decisions.append(assessment.decision)
+        self.cases.risk_assessed(case_id)
         request_id = self._audit("assess_risk", decisions, case_id , risk_level=assessment.risk_level, ctr_required=assessment.ctr["required"])
         return {
             "request_id": request_id,
@@ -264,6 +271,8 @@ class Orchestrator:
     ) -> dict[str, Any]:
         """Tool 2. Agent identity (if the policy requires keys), allowlist, then parameter checks."""
         v = self.tools.validate_call(agent_name, tool_name, parameters, agent_key)
+        if not v.approved:
+            self.cases.call_refused(case_id)
         # The key itself is never logged or returned; only who it belongs to.
         request_id = self._audit(
             "validate_tool_call", v.decisions, case_id,
@@ -280,13 +289,17 @@ class Orchestrator:
     
 
     def handle_pii_check(self, text: str, case_id: Optional[str] = None) -> dict[str, Any]:
-        """Tool 3. Mask PII in a tool result and scan it for hidden instructions."""
-        r = self.tools.validate_result(text)
+        """Tool 3. Mask PII in a tool result and scan it for hidden instructions.
+        Tokens need a case to belong to: without a case_id the values are masked for good."""
+        self.cases.seen(case_id)
+        reversible = bool(self.policy.tool_call_guardrails.reversible_masking and case_id)
+        r = self.tools.validate_result(text, self.vault.tokenizer(case_id) if reversible else None)
         problems = [d.layer for d in r.decisions if d.decision is Decision.BLOCK]
         request_id = self._audit("pii_check", r.decisions, case_id, safe_to_use=r.safe_to_use)
         return {
             "request_id": request_id,
             "masked_text": r.masked_text,
+            "reversible": reversible,
             "pii_found": r.pii_found,
             "safe_to_use": r.safe_to_use,
             "problems": problems,
@@ -332,6 +345,8 @@ class Orchestrator:
             ),
             policy_version=self.version,
         )
+        if recommendation == "block_and_escalate":
+            self.cases.sanctions_blocked(case_id)
         request_id = self._audit("sanctions_screen", [decision], case_id, recommendation=recommendation)
         return {
             "request_id": request_id,
@@ -382,6 +397,7 @@ class Orchestrator:
         else:
             overall = GroundingVerdict.GROUNDED
 
+        self.cases.grounding_checked(case_id, overall is GroundingVerdict.GROUNDED)
         request_id = self._audit("validate_grounding", decisions, case_id, verdict=overall.value)
         return {
             "request_id": request_id,
@@ -403,6 +419,56 @@ class Orchestrator:
             "policy_version": self.version,
         }
     
+    def handle_finalize_check(
+        self, agent_name: str, report_text: str, case_id: str, agent_key: Optional[str] = None
+    ) -> dict[str, Any]:
+        """Tool 8. The last gate: checks FinGuard's own record of the case, then restores the real
+        values. A refused report stays masked, and an unverified caller gets no report at all."""
+        cfg = self.policy.finalize_check
+        decisions: list[GuardrailDecision] = []
+        report, missing, unknown, restored, verified = None, [], [], 0, None
+        if not cfg.enabled:
+            reason = f"finalize_check is off in policy {self.version}"
+        else:
+            who = self.tools.identity.check(agent_name, agent_key)
+            decisions.append(who)
+            verified = who.metadata["verified_agent"]
+            if who.stops_pipeline:
+                reason = who.reasoning_trace
+            elif agent_name not in cfg.allowed_agents:
+                reason = "agent_not_allowed_to_finalize"
+            else:
+                missing = self.cases.missing(case_id, cfg.required_steps)
+                final_text, restored, unknown = self.vault.restore(case_id, report_text)
+                if unknown:  # a token this case never issued: the report would go out with a blank in it
+                    missing.append("unknown_tokens")
+                if missing:
+                    reason, restored = "required_steps_missing", 0
+                    report = self.pii_detector.mask(report_text, self.vault.tokenizer(case_id)).masked_text
+                else:
+                    reason, report = "all_required_steps_done", final_text
+        approved = reason == "all_required_steps_done"
+        decisions.append(GuardrailDecision(
+            layer="compliance.finalize",
+            decision=Decision.PASS if approved else Decision.BLOCK,
+            # Step names and a count only: the report and its values never reach the audit trail.
+            reasoning_trace=f"{reason} missing={','.join(missing) or 'none'} tokens_restored={restored}",
+            policy_version=self.version,
+        ))
+        request_id = self._audit(
+            "finalize_check", decisions, case_id, agent=agent_name, verified_agent=verified, approved=approved
+        )
+        return {
+            "request_id": request_id,
+            "approved": approved,
+            "reason": reason,
+            "missing": missing,
+            "unknown_tokens": unknown,
+            "tokens_restored": restored,
+            "report_text": report,
+            "policy_version": self.version,
+        }
+
     def handle_get_policy_info(self) -> dict[str, Any]:
         """Tool 6 and GET /policy. Which rules are active, for audit traceability."""
         meta = self.policy.policy_metadata

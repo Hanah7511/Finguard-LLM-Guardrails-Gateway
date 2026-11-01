@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from typing import Callable, Optional
 
 
 @dataclass(frozen=True)
@@ -34,13 +35,15 @@ class PIIDetector(ABC):
     def detect(self, text: str) -> list[PIIEntity]:
         """Return all PII spans in ``text`` (may overlap)."""
 
-    def mask(self, text: str) -> PIIResult:
-        """Replace each detected span with ``[ENTITY_TYPE]``."""
-        kept = _resolve_overlaps(self.detect(text))
+    def mask(self, text: str, token_for: Optional[Callable[[str, str], str]] = None) -> PIIResult:
+        """Replace each detected span with ``[ENTITY_TYPE]``, or with ``token_for(type, value)`` if given."""
+        kept = sorted(_resolve_overlaps(self.detect(text)), key=lambda e: e.start)
+        # Tokens are made in reading order, so the first value in the text gets number 1.
+        labels = [token_for(e.entity_type, text[e.start : e.end]) if token_for else f"[{e.entity_type}]" for e in kept]
         masked = text
-        for ent in sorted(kept, key=lambda e: e.start, reverse=True):
-            masked = masked[: ent.start] + f"[{ent.entity_type}]" + masked[ent.end :]
-        return PIIResult(masked_text=masked, entities=sorted(kept, key=lambda e: e.start))
+        for ent, label in reversed(list(zip(kept, labels))):
+            masked = masked[: ent.start] + label + masked[ent.end :]
+        return PIIResult(masked_text=masked, entities=kept)
 
 
 def _resolve_overlaps(entities: list[PIIEntity]) -> list[PIIEntity]:
