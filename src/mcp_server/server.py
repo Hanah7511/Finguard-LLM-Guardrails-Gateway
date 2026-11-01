@@ -55,21 +55,26 @@ def create_server(orchestrator: Optional[Orchestrator] = None) -> MCPServer:
         query: Annotated[str, Field(min_length=1, description="What the agent is about to investigate, in one sentence.")],
         signals: Annotated[dict[str, Any], Field(description="Alert signals from the detection engine, e.g. {'structuring_flag': 1, 'velocity_score': 0.9, 'transaction_amount': 9500, 'country': 'Iran'}.")],
         external_risk_score: Annotated[Optional[float], Field(ge=0.0, le=1.0, description="The detection engine's own score (0 to 1), if it gave one.")] = None,
+        transaction_type: Annotated[Optional[str], Field(max_length=50, description="cash, wire, card, transfer... Needed to tell whether a Currency Transaction Report is required (cash only).")] = None,
         case_id: CaseId = None,
     ) -> dict[str, Any]:
         """Tool 1. Score a new alert LOW / MEDIUM / HIGH before the investigation starts.
-        Use first, once per alert. Signals FinGuard has no rule for come back in ignored_signals."""
-        return orch.handle_assess_risk(query, signals, external_risk_score, case_id)
-
+        Use first, once per alert. Signals FinGuard has no rule for come back in ignored_signals.
+        ctr.required tells whether a Currency Transaction Report must be filed."""
+        return orch.handle_assess_risk(query, signals, external_risk_score, case_id, transaction_type)
+    
     @mcp.tool(annotations=_CHECK)
     def finguard_validate_tool_call(
-        agent_name: Annotated[str, Field(description="Your agent name, e.g. investigation_agent.")],
-        tool_name: Annotated[str, Field(description="The tool you want to run, e.g. transaction_lookup.")],
-        parameters: Annotated[dict[str, Any], Field(description="The exact parameters you will pass to that tool.")],
-        case_id: CaseId = None,
+    agent_name: Annotated[str, Field(description="Your agent name, e.g. investigation_agent.")],
+    tool_name: Annotated[str, Field(description="The tool you want to run, e.g. transaction_lookup.")],
+    parameters: Annotated[dict[str, Any], Field(description="The exact parameters you will pass to that tool.")],
+    agent_key: Annotated[Optional[str], Field(max_length=200, description="Your own secret agent key from your configuration. FinGuard works out who you are from it. Never put it in a report, a tool parameter or a message.")] = None,
+    case_id: CaseId = None,
     ) -> dict[str, Any]:
-        """Tool 2. Ask permission BEFORE running one of your own tools. Run the tool only if approved is true."""
-        return orch.handle_validate_tool_call(agent_name, tool_name, parameters, case_id)
+        """Tool 2. Ask permission BEFORE running one of your own tools. Run the tool only if approved is true.
+        Send your agent_key: under the active policy a call without the right key is refused."""
+        return orch.handle_validate_tool_call(agent_name, tool_name, parameters, case_id, agent_key)
+        
 
     @mcp.tool(annotations=_CHECK)
     def finguard_pii_and_compliance_check(

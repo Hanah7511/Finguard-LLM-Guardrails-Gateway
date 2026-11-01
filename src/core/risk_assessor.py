@@ -2,7 +2,8 @@
 
 If another system (e.g. a detection engine) already produced a risk score, pass it
 as external_score. The final score is the higher of the two, so FinGuard can raise
-the caution level but never lower it.
+the caution level but never lower it. It also says whether a Currency Transaction Report is required (cash over the policy
+threshold). That is a reporting duty, not a sign of suspicion, so it does not change the score.
 """
 from __future__ import annotations
 
@@ -28,6 +29,7 @@ class RiskAssessment:
     contributing_signals: dict[str, float] = field(default_factory=dict)
     ignored_signals: list[str] = field(default_factory=list)
     decision: Optional[GuardrailDecision] = None
+    ctr: dict[str, Any] = field(default_factory=dict)
 
 
 def _as_unit(value: Any) -> Optional[float]:
@@ -47,7 +49,9 @@ class RiskAssessor:
         self._monitored = {j.strip().lower() for j in monitored_jurisdictions}
         self._policy_version = policy_version
 
-    def assess(self, context: dict[str, Any], external_score: Optional[float] = None) -> RiskAssessment:
+    def assess(
+            self, context: dict[str, Any], external_score: Optional[float] = None, transaction_type: Optional[str] = None
+        ) -> RiskAssessment:
         sw = Stopwatch()
         weights = self._policy.signal_weights
         contributions: dict[str, float] = {}
@@ -82,21 +86,45 @@ class RiskAssessor:
             level = "MEDIUM"
         else:
             level = "LOW"
+        ctr = self._ctr(context.get("transaction_amount"), transaction_type)
 
         decision = GuardrailDecision(
             layer=self.layer,
             decision=Decision.PASS,
             reasoning_trace=(
                 f"score={score:.2f} (own={own:.2f}, external={ext}) level={level} "
-                f"signals={sorted(contributions)}"
+                f"signals={sorted(contributions)} ctr_required={ctr['required']}"
             ),
             policy_version=self._policy_version,
             latency_ms=sw.ms(),
             metadata={"contributions": contributions, "ignored_signals": ignored, "scores_disagree": disagree},
         )
         return RiskAssessment(
-            score, level, RECOMMENDATIONS[level], own, ext, disagree, contributions, ignored, decision
+            score, level, RECOMMENDATIONS[level], own, ext, disagree, contributions, ignored, decision, ctr
         )
+
+    
+    def _ctr(self, amount: Any, transaction_type: Optional[str]) -> dict[str, Any]:
+        rule = self._policy.ctr_rule
+        if not rule.enabled:
+            return {"applied": False, "required": False, "reason": "the CTR rule is not in this policy version"}
+        out = {"applied": True, "required": False, "citation": rule.citation}
+        kind = transaction_type.strip().lower() if isinstance(transaction_type, str) else ""
+        limit = f"{rule.threshold:,.0f}"
+        if not kind:
+            out["reason"] = "transaction_type not given; a CTR applies only to cash"
+        elif kind not in {t.lower() for t in rule.cash_types}:
+            out["reason"] = f"a {kind} transaction is not cash; a CTR applies only to cash"
+        elif not isinstance(amount, (int, float)) or isinstance(amount, bool):
+            out["reason"] = "cash transaction without a transaction_amount to compare"
+        elif amount > rule.threshold:  # the rule says "more than", so exactly the threshold is not enough
+            out.update(required=True, reason=f"cash transaction of {amount:,.0f} is more than {limit}")
+        else:
+            # 31 CFR 1010.313 adds up one person's cash on the same business day; FinGuard sees one amount.
+            out["reason"] = (f"cash transaction of {amount:,.0f} is not more than {limit}; "
+                             "same-day cash totals are not added up here")
+        return out
+
 
     def _is_large(self, amount: Any) -> bool:
         return (

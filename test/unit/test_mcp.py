@@ -27,6 +27,8 @@ TOOLS = {
     "finguard_sanctions_screen", "finguard_validate_grounding", "finguard_get_policy_info",
     "finguard_scan_documents",
 }
+# Made-up test keys, not real secrets. FinGuard is given the same ones.
+KEYS = {"investigation_agent": "test-key-investigation-0001", "summarization_agent": "test-key-summarization-0003"}
 
 
 class FakeGrounder(Grounder):
@@ -42,7 +44,9 @@ def server():
     settings = get_settings().model_copy(update={"openai_api_key": None})
     policy = get_policy()
     test_list = SanctionsScreener.from_policy(settings.sanctions_test_list_path, policy.sanctions_screening, "test")
-    return create_server(Orchestrator(policy, settings, sanctions=test_list, grounder=FakeGrounder(), audit=DecisionLogger(None)))
+    return create_server(Orchestrator(
+        policy, settings, sanctions=test_list, grounder=FakeGrounder(), audit=DecisionLogger(None), agent_keys=KEYS,
+    ))
 
 
 def call(server, tool: str, args: dict | None = None):
@@ -81,8 +85,27 @@ def test_score_out_of_range_is_an_error(server):
 def test_tool_not_on_allowlist_is_refused(server):
     r = call(server, "finguard_validate_tool_call", {
         "agent_name": "summarization_agent", "tool_name": "transaction_lookup", "parameters": {},
+        "agent_key": KEYS["summarization_agent"],
     })
     assert r.structured_content["approved"] is False
+    assert r.structured_content["reason"] == "tool_not_in_allowlist"
+
+
+def test_tool_call_with_own_key_is_approved(server):
+    r = call(server, "finguard_validate_tool_call", {
+        "agent_name": "investigation_agent", "tool_name": "transaction_lookup",
+        "parameters": {"transaction_id": "TXN-2026001"}, "agent_key": KEYS["investigation_agent"],
+    })
+    assert r.structured_content["approved"] is True
+    assert r.structured_content["verified_agent"] == "investigation_agent"
+
+
+def test_cash_alert_needs_a_ctr(server):
+    a = next(x for x in ALERTS["alerts"] if x["alert_id"] == "ALT-2026-008")  # cash, 545,000
+    r = call(server, "finguard_assess_risk", {
+        "query": a["query"], "signals": a["signals"], "transaction_type": a["transaction_type"],
+    })
+    assert r.structured_content["ctr"]["required"] is True
 
 
 def test_pii_is_masked(server):

@@ -72,7 +72,7 @@ def chat(req: ChatRequest, orch: Orchestrator = Depends(get_orchestrator)) -> di
 @app.post("/assess-risk")
 def assess_risk(req: AssessRiskRequest, orch: Orchestrator = Depends(get_orchestrator)) -> dict[str, Any]:
     """Tool 1 over HTTP. An upstream engine posts its alert here."""
-    return orch.handle_assess_risk(req.query, req.signals, req.external_risk_score, req.case_id)
+    return orch.handle_assess_risk(req.query, req.signals, req.external_risk_score, req.case_id, req.transaction_type)
 
 
 @app.post("/sanctions-screen")

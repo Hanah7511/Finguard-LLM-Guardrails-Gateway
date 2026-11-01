@@ -11,7 +11,7 @@ import logging
 import uuid
 from collections import Counter
 from functools import lru_cache
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 from src.config.policy_loader import get_policy
 from src.config.policy_schema import GuardrailPolicy, SanctionsScreeningPolicy
@@ -33,6 +33,7 @@ from src.output_guardrails.grounding.base import Grounder, GroundingVerdict
 from src.output_guardrails.grounding.cosine_grounding import CosineGrounder
 from src.output_guardrails.grounding.nli_grounding import NLIGrounder
 from src.output_guardrails.pipeline import OutputGuardrailPipeline
+from src.tool_call_guardrails.agent_identity import AgentIdentity
 from src.tool_call_guardrails.pipeline import ToolCallGuardrailPipeline
 from src.vector_store.retriever import Embedder, RegulationRetriever, SentenceTransformerEmbedder
 
@@ -75,6 +76,7 @@ class Orchestrator:
         llm: Optional[LLMClient] = None,
         audit: Optional[DecisionLogger] = None,
         safety_model: Optional[SafetyModel] = None,
+        agent_keys: Optional[Mapping[str, str]] = None,
     ) -> None:
         # Every argument after `settings` is optional so tests can plug in fakes.
         self.policy = policy
@@ -88,7 +90,7 @@ class Orchestrator:
         self.grounder = grounder or self._build_grounder(settings, embedder)
 
         self.input = InputGuardrailPipeline(policy, self.pii_detector, safety_model)
-        self.tools = ToolCallGuardrailPipeline(policy, self.pii_detector)
+        self.tools = ToolCallGuardrailPipeline(policy, self.pii_detector, self._build_identity(policy, agent_keys))
         self.output = OutputGuardrailPipeline(policy, self.grounder, self.retriever, self.pii_detector)
 
         s = policy.sanctions_screening
@@ -126,6 +128,17 @@ class Orchestrator:
             )
             path, source = settings.sanctions_test_list_path, "test"
         return SanctionsScreener.from_policy(path, cfg, source)
+
+    @staticmethod
+    def _build_identity(policy: GuardrailPolicy, agent_keys: Optional[Mapping[str, str]]) -> Optional[AgentIdentity]:
+        """Tests and the fake agent pass their own keys; otherwise read AGENT_KEY_* from .env."""
+        if agent_keys is not None:
+            return AgentIdentity(agent_keys, policy.version)
+        cfg = policy.tool_call_guardrails
+        if cfg.require_agent_keys:
+            return AgentIdentity.from_env(cfg.allowlist, policy.version)
+        return None
+
 
     def _build_grounder(self, settings: Settings, embedder: Embedder) -> Grounder:
         cfg = self.policy.output_guardrails
@@ -206,8 +219,9 @@ class Orchestrator:
         signals: dict[str, Any],
         external_risk_score: Optional[float] = None,
         case_id: Optional[str] = None,
+        transaction_type: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Tool 1. Quick pattern scan of the query, then weighted risk scoring."""
+        """Tool 1. Quick pattern scan of the query, then weighted risk scoring and the CTR rule."""
         decisions = []
         for check in (self.input.injection, self.input.safety_patterns):
             decision = check.check(query)
@@ -223,9 +237,9 @@ class Orchestrator:
                     "policy_version": self.version,
                 }
 
-        assessment = self.risk.assess(signals, external_risk_score)
+        assessment = self.risk.assess(signals, external_risk_score, transaction_type)
         decisions.append(assessment.decision)
-        request_id = self._audit("assess_risk", decisions, case_id, risk_level=assessment.risk_level)
+        request_id = self._audit("assess_risk", decisions, case_id , risk_level=assessment.risk_level, ctr_required=assessment.ctr["required"])
         return {
             "request_id": request_id,
             "risk_score": assessment.risk_score,
@@ -236,24 +250,34 @@ class Orchestrator:
             "scores_disagree": assessment.scores_disagree,
             "risk_signals": sorted(assessment.contributing_signals),
             "ignored_signals": assessment.ignored_signals,
+            "ctr": assessment.ctr,
             "policy_version": self.version,
         }
 
     def handle_validate_tool_call(
-        self, agent_name: str, tool_name: str, parameters: dict[str, Any], case_id: Optional[str] = None
+        self,
+        agent_name: str,
+        tool_name: str,
+        parameters: dict[str, Any],
+        case_id: Optional[str] = None,
+        agent_key: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Tool 2. Allowlist, then parameter checks, before the agent's tool runs."""
-        v = self.tools.validate_call(agent_name, tool_name, parameters)
+        """Tool 2. Agent identity (if the policy requires keys), allowlist, then parameter checks."""
+        v = self.tools.validate_call(agent_name, tool_name, parameters, agent_key)
+        # The key itself is never logged or returned; only who it belongs to.
         request_id = self._audit(
-            "validate_tool_call", v.decisions, case_id, agent=agent_name, tool=tool_name, approved=v.approved
+            "validate_tool_call", v.decisions, case_id,
+            agent=agent_name, verified_agent=v.verified_agent, tool=tool_name, approved=v.approved,
         )
         return {
             "request_id": request_id,
             "approved": v.approved,
             "reason": v.reason,
+            "verified_agent": v.verified_agent,
             "agents_allowed_for_tool": v.agents_allowed_for_tool,
             "policy_version": self.version,
         }
+    
 
     def handle_pii_check(self, text: str, case_id: Optional[str] = None) -> dict[str, Any]:
         """Tool 3. Mask PII in a tool result and scan it for hidden instructions."""

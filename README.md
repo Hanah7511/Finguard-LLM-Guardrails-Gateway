@@ -80,7 +80,7 @@ All requests are scanned before reaching the model. Pipeline runs in performance
 > **Reversible PII masking (planned).** Real values are stored in FinGuard under a token (`[US_SSN_1]`). AI components only ever see the token. A non-AI program restores real values after human approval — required for SAR filing with FinCEN.
 
 ### Layer 2 — Tool-Call Guardrails (OWASP LLM06)
-Every agent tool call passes through an allowlist check before execution, and every tool result is PII-scanned on the way out. Agent identity will be derived from a **per-agent secret key** (planned) — not the agent name, which can be forged.
+Every agent tool call passes through an allowlist check before execution, and every tool result is PII-scanned on the way out. Agent identity comes from a **per-agent secret key** (from policy v1.4.0), not the agent name, which can be forged.
 
 ### Layer 3 — Output Guardrails (OWASP LLM09)
 LLM responses validated in three stages:
@@ -101,14 +101,14 @@ NLI grounding against official law texts (US BSA regulations; FATF Recommendatio
 
 ## MCP Tools (8)
 
-*Tools 1–7 are live in `src/mcp_server/server.py`; Tool 8 is planned (Step 6).* All tools take a `case_id` to link calls into one audit trail per case. Each tool's description is written for the agent: when to call it and what to do with the answer. Agent authentication via secret key (not self-reported name) is planned; until then Tool 2 trusts the agent name it is given.
+*Tools 1–7 are live in `src/mcp_server/server.py`; Tool 8 is planned (Step 6).* All tools take a `case_id` to link calls into one audit trail per case. Each tool's description is written for the agent: when to call it and what to do with the answer. From policy v1.4.0, Tool 2 requires the agent's secret key (`agent_key`) and works out the caller from it, so a self-reported name is not enough. In finintel the tool wrapper will add the key in code, so the LLM never sees it.
 
 | # | Tool | Description |
 |---|------|-------------|
-| 01 | `finguard_assess_risk()` | Risk triage before any investigation starts. Scores alert signals against YAML weights. Returns: `LOW / MEDIUM / HIGH` |
-| 02 | `finguard_validate_tool_call()` | Authorizes or blocks an agent's tool request. Checks agent identity (from secret key) against YAML allowlist. No LLM call — fast. |
+| 01 | `finguard_assess_risk()` | Risk triage before any investigation starts. Scores alert signals against YAML weights. Returns: `LOW / MEDIUM / HIGH`. With `transaction_type`, also says if a Currency Transaction Report is required (cash of more than $10,000; a reporting duty, so it does not change the score). |
+| 02 | `finguard_validate_tool_call()` | Authorizes or blocks an agent's tool request. Checks the agent's secret key, then the YAML allowlist, then the parameters. No LLM call — fast. |
 | 03 | `finguard_pii_and_compliance_check()` | PII detection and reversible masking. Uses Presidio + regex fallback. Real values stored in FinGuard, not returned. |
-| 04 | `finguard_sanctions_screen()` | Screens a person or company against the UN, UAE Local Terrorist List and OFAC SDN lists (exact + fuzzy names, aliases). Date of birth / ID number confirm or rule out a name match; a name alone goes to review, and an exact name match is only cleared on identifiers marked `identifiers_verified` (KYC). For a company, `owners` applies the OFAC 50% rule (sanctioned owners' shares added up, through chains of companies). Country risk from the FATF black and grey lists. `transaction_type` check for CTR applicability (cash-only rule, planned). |
+| 04 | `finguard_sanctions_screen()` | Screens a person or company against the UN, UAE Local Terrorist List and OFAC SDN lists (exact + fuzzy names, aliases). Date of birth / ID number confirm or rule out a name match; a name alone goes to review, and an exact name match is only cleared on identifiers marked `identifiers_verified` (KYC). For a company, `owners` applies the OFAC 50% rule (sanctioned owners' shares added up, through chains of companies). Country risk from the FATF black and grey lists. |
 | 05 | `finguard_validate_grounding()` | NLI hallucination check. Agent sends claim + citation reference only — FinGuard fetches the authoritative law text. Agent cannot supply a fake source. |
 | 06 | `finguard_get_policy_info()` | Returns active policy version, last change, `approved_by`, and applicable rules. Also available via `GET /policy`. |
 | 07 | `finguard_scan_documents()` | Scans RAG-retrieved documents for indirect prompt injection — hidden instructions embedded in regulatory text or case files. |
@@ -125,7 +125,7 @@ The orchestrator loads all workers once at startup (PII masker, NLI checker, san
 | `handle_chat()` | API `/chat` | All: input → law lookup → GPT → output guards |
 | `handle_validate()` | API `/validate` | Input guards only — no GPT, no cost |
 | `handle_assess_risk()` | MCP Tool 1 | Injection + safety scan → risk assessor |
-| `handle_validate_tool_call()` | MCP Tool 2 | Allowlist → parameter check |
+| `handle_validate_tool_call()` | MCP Tool 2 | Agent key → allowlist → parameter check |
 | `handle_pii_check()` | MCP Tool 3 | PII masker → hidden instruction scanner |
 | `handle_sanctions_screen()` | MCP Tool 4 | Sanctions screener only |
 | `handle_validate_grounding()` | MCP Tool 5 | Law store + NLI checker, per claim |
@@ -195,7 +195,8 @@ finguard-llm-guardrails-gateway/
 │   │       ├── v1.0.0_guardrail_policy.yaml   # versioned policy (approved_by, change_reason)
 │   │       ├── v1.1.0_guardrail_policy.yaml
 │   │       ├── v1.2.0_guardrail_policy.yaml
-│   │       ├── v1.3.0_guardrail_policy.yaml   # active
+│   │       ├── v1.3.0_guardrail_policy.yaml
+│   │       ├── v1.4.0_guardrail_policy.yaml   # active
 │   │       └── CHANGELOG.md
 │   ├── core/
 │   │   ├── orchestrator.py          # THE BRAIN — one handle_* per job
@@ -213,6 +214,7 @@ finguard-llm-guardrails-gateway/
 │   │   │   └── presidio_detector.py
 │   │   └── pipeline.py
 │   ├── tool_call_guardrails/
+│   │   ├── agent_identity.py
 │   │   ├── tool_allowlist.py
 │   │   ├── pre_execution_gate.py
 │   │   ├── post_execution_gate.py
@@ -288,7 +290,7 @@ Without the real sanctions file, FinGuard falls back to the fictional test list,
 | Enhanced due diligence for countries the FATF calls for | FATF Recommendation 19 | Black list → review; grey list → higher risk score |
 | Entities owned 50% or more by blocked persons are blocked too | OFAC Revised Guidance on Entity Property and Interests in Property (2014) | Tool 4 `owners`: ownership rule, threshold in the policy YAML |
 | Identify beneficial owners of legal-entity customers | 31 CFR 1010.230, FATF Recommendation 10 | KYC/CDD tool (planned) |
-| Report cash transactions over $10,000 | 31 CFR 1010.311 | Cash-only CTR rule (planned) |
+| Report cash transactions over $10,000 | 31 CFR 1010.311 | Cash-only CTR rule in Tool 1. Checks one amount at a time: same-day totals (31 CFR 1010.313) are not added up |
 | Suspicious activity reports must be accurate | 31 CFR 1020.320 | Tool 5: each claim checked against FinGuard's own copy of the cited law |
 
 ---
@@ -315,13 +317,13 @@ OPENAI_API_KEY=sk-...
 # PostgreSQL audit trail (planned)
 DATABASE_URL=postgresql://user:pass@localhost:5432/finguard_audit
 
-# Agent secret keys, one per agent (planned)
+# Agent secret keys, one per agent. Make each with: python -c "import secrets; print(secrets.token_urlsafe(32))"
 AGENT_KEY_INVESTIGATION=inv-secret-...
 AGENT_KEY_COMPLIANCE=cmp-secret-...
 AGENT_KEY_SUMMARIZATION=sum-secret-...
 
 # Active policy version
-ACTIVE_POLICY_VERSION=1.3.0
+ACTIVE_POLICY_VERSION=1.4.0
 ```
 
 ### 3. Run FastAPI (standalone)
@@ -402,7 +404,7 @@ services:
 | Sanctions match recall | `sanctions_screen()` | Name variation testing: Mohammed / Muhammad / Mohamed |
 | Task success rate | Full MCP flow | Scripted fake-agent now; real finintel later |
 | Policy version coverage | All decisions | Must be 100% — automatic test, not a score |
-| Policy v1.0.0 → v1.3.0 | Full eval suite | Run on every version; compare results |
+| Policy v1.0.0 → v1.4.0 | Full eval suite | Run on every version; compare results |
 | End-to-end agent run | `scripts/fake_agent.py` (12 alerts, `--rogue`) | Task success: every investigation reaches the expected outcome; rogue calls refused |
 | Sample alert regression | `data/sample_alerts/alerts.json` | `python scripts/run_sample_alerts.py` — must stay 12/12 unless a policy change explains the difference |
 
@@ -438,7 +440,7 @@ services:
 **In active development.** Part of the Financial Risk Intelligence Platform portfolio.
 
 - [x] Architecture + design (dual-door, 6 guardrail layers, 8 MCP tools)
-- [x] Versioned YAML policy engine (v1.0.0 – v1.2.0, v1.3.0 active)
+- [x] Versioned YAML policy engine (v1.0.0 – v1.3.0, v1.4.0 active)
 - [x] Guardrail modules for all 6 layers (input, tool-call, output, safety, privacy, compliance)
 - [x] Security model designed (5 properties) — implementation in progress
 - [x] `orchestrator.py` — single brain for both doors (one `handle_*` per job; risk score = higher of FinGuard and upstream engine score)
@@ -446,10 +448,12 @@ services:
 - [x] Official sanctions lists (UN, UAE Local, OFAC) with fast fuzzy screening
 - [x] Identifier matching (date of birth, ID number) and FATF black/grey-list country risk
 - [x] Sample alert set (12 fictional scenarios) with an expected-result runner
-- [x] FastAPI door (`/health`, `/policy`, `/validate`, `/chat`, `/assess-risk`, `/sanctions-screen`) with 13 tests
-- [x] MCP server: Tools 1–7 over stdio or streamable HTTP, with 10 tests (in-memory MCP client, fake NLI)
-- [x] Fake agent: scripted stand-in for finintel runs all 12 alerts end to end over MCP, with a `--rogue` mode (3 tests)
-- [ ] Tool 8 `finguard_finalize_check` + per-agent secret keys
+- [x] FastAPI door (`/health`, `/policy`, `/validate`, `/chat`, `/assess-risk`, `/sanctions-screen`) with 14 tests
+- [x] MCP server: Tools 1–7 over stdio or streamable HTTP, with 12 tests (in-memory MCP client, fake NLI)
+- [x] Fake agent: scripted stand-in for finintel runs all 12 alerts end to end over MCP, with a `--rogue` mode (4 tests)
+- [x] Per-agent secret keys for Tool 2 (10 tests)
+- [x] Cash-only Currency Transaction Report flag in Tool 1 (7 tests)
+- [ ] Tool 8 `finguard_finalize_check` + reversible masking
 - [ ] Tests + evals
 - [ ] PostgreSQL audit trail
 - [ ] `/metrics` endpoint

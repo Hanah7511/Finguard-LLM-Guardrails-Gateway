@@ -46,6 +46,12 @@ def test_every_alert_reaches_the_expected_outcome(server):
     assert all(v in (READY, CLOSED, SANCTIONS_HIT) for v in got.values())
 
 
+def test_cash_report_is_flagged_even_when_the_case_closes(server):
+    results = outcomes(server)
+    assert [k for k, v in results.items() if v.ctr_required] == ["ALT-2026-008"]  # cash, 545,000
+    assert results["ALT-2026-008"].outcome == CLOSED
+
+
 def test_poisoned_case_file_is_dropped(server):
     inv = outcomes(server)["ALT-2026-007"]
     assert any("flagged [1]" in step for step in inv.steps)

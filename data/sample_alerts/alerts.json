@@ -7,7 +7,7 @@
     "external_risk_score": "The engine's own score (0..1) or null. FinGuard uses the higher of its own score and this one, and flags a large disagreement.",
     "party": "Optional. The person or company screened against the sanctions lists. identifiers_verified: true only if the DOB / ID were checked against an official document."
   },
-  "expected_policy_version": "1.3.0",
+  "expected_policy_version": "1.4.0",
   "alerts": [
     {
       "case_id": "CASE-2026-001",
@@ -29,7 +29,8 @@
         "risk_score": 0.91,
         "own_score": 0.72,
         "scores_disagree": false,
-        "ignored_signals": []
+        "ignored_signals": [],
+        "ctr_required": false
       }
     },
     {
@@ -50,7 +51,8 @@
         "risk_score": 0.04,
         "own_score": 0.04,
         "scores_disagree": false,
-        "ignored_signals": []
+        "ignored_signals": [],
+        "ctr_required": false
       }
     },
     {
@@ -72,7 +74,8 @@
         "risk_score": 0.45,
         "own_score": 0.45,
         "scores_disagree": false,
-        "ignored_signals": []
+        "ignored_signals": [],
+        "ctr_required": false
       }
     },
     {
@@ -94,7 +97,8 @@
         "risk_score": 0.7,
         "own_score": 0.7,
         "scores_disagree": false,
-        "ignored_signals": []
+        "ignored_signals": [],
+        "ctr_required": false
       }
     },
     {
@@ -115,7 +119,8 @@
         "risk_score": 0.3,
         "own_score": 0.3,
         "scores_disagree": false,
-        "ignored_signals": []
+        "ignored_signals": [],
+        "ctr_required": false
       }
     },
     {
@@ -147,6 +152,7 @@
           "pass_through_flag",
           "round_amount_flag"
         ],
+        "ctr_required": false,
         "sanctions": "clear",
         "country_risk": "STANDARD"
       }
@@ -173,7 +179,8 @@
         "scores_disagree": true,
         "ignored_signals": [
           "network_risk_flag"
-        ]
+        ],
+        "ctr_required": false
       }
     },
     {
@@ -201,6 +208,7 @@
         "ignored_signals": [
           "round_amount_flag"
         ],
+        "ctr_required": true,
         "sanctions": "clear",
         "country_risk": "ELEVATED"
       }
@@ -227,7 +235,8 @@
         "scores_disagree": false,
         "ignored_signals": [
           "crypto_counterparty_flag"
-        ]
+        ],
+        "ctr_required": false
       }
     },
     {
@@ -255,6 +264,7 @@
         "own_score": 0.14,
         "scores_disagree": false,
         "ignored_signals": [],
+        "ctr_required": false,
         "sanctions": "clear",
         "country_risk": "STANDARD"
       }
@@ -282,6 +292,7 @@
         "own_score": 0.1,
         "scores_disagree": false,
         "ignored_signals": [],
+        "ctr_required": false,
         "sanctions": "block_and_escalate",
         "country_risk": "ELEVATED"
       }
@@ -307,7 +318,8 @@
         "scores_disagree": false,
         "ignored_signals": [
           "location_anomaly_flag"
-        ]
+        ],
+        "ctr_required": false
       }
     }
   ]

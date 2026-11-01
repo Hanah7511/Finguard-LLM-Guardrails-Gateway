@@ -86,6 +86,12 @@ def test_assess_risk_accepts_a_whole_alert(client):
     assert sorted(body["ignored_signals"]) == a["expected"]["ignored_signals"]
 
 
+def test_large_wire_is_not_a_ctr(client):
+    a = next(x for x in ALERTS["alerts"] if x["alert_id"] == "ALT-2026-006")  # wire, 250,000
+    body = client.post("/assess-risk", json={"query": a["query"], "signals": a["signals"], "transaction_type": "wire"}).json()
+    assert body["ctr"]["required"] is False
+
+
 def test_assess_risk_rejects_score_out_of_range(client):
     a = {**alert("ALT-2026-006"), "external_risk_score": 7}
     assert client.post("/assess-risk", json=a).status_code == 422

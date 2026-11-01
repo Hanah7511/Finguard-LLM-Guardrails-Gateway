@@ -3,7 +3,18 @@
 Every policy change gets a new versioned file, an entry here and a git commit.
 Old versions stay in place: reports record the version they were validated under.
 
-## 1.3.0 — 2026-10-29 (active)
+## 1.4.0 — 2026-10-31 (active)
+Approved by: compliance-team
+
+- `tool_call_guardrails.require_agent_keys: true`. Tool 2 refuses a call unless it carries the secret key
+  of the agent it names (`AGENT_KEY_<AGENT>` in `.env`, e.g. `AGENT_KEY_INVESTIGATION`). FinGuard works
+  out the caller from the key, so an agent can no longer claim another agent's name to get its tools.
+  Keys are compared in constant time and never logged; the audit record holds `verified_agent`.
+- `risk_assessment.ctr_rule`: Tool 1 takes `transaction_type` and returns `ctr`. A Currency Transaction
+  Report is required only for cash of more than 10,000 (31 CFR 1010.311); a large wire is not a CTR case.
+  The CTR flag does not change the risk score. Same-day cash totals (31 CFR 1010.313) are not added up.
+
+## 1.3.0 — 2026-10-29
 Approved by: compliance-team
 
 - `sanctions_screening.ownership_rule` (OFAC 50% rule): a company owned 50% or more, in total, by

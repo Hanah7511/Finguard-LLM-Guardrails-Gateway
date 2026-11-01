@@ -35,6 +35,8 @@ class AssessRiskRequest(CaseRequest):
         examples=[{"pass_through_flag": 1, "velocity_score": 0.6, "transaction_amount": 250000, "country": "United Arab Emirates"}]
     )
     external_risk_score: Optional[float] = Field(default=None, ge=0.0, le=1.0, examples=[0.78])
+    # cash, wire, card... A Currency Transaction Report applies to cash only.
+    transaction_type: Optional[str] = Field(default=None, max_length=50, examples=["wire"])
 
 
 class SanctionsScreenRequest(CaseRequest):

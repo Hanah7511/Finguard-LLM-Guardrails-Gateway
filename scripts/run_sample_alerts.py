@@ -28,7 +28,7 @@ ALERTS_PATH = ROOT / "data" / "sample_alerts" / "alerts.json"
 
 def run_alert(orch: Orchestrator, alert: dict) -> dict:
     risk = orch.handle_assess_risk(
-        alert["query"], alert["signals"], alert.get("external_risk_score"), alert["case_id"]
+        alert["query"], alert["signals"], alert.get("external_risk_score"), alert["case_id"], alert.get("transaction_type"),
     )
     result = {
         "risk_level": risk["risk_level"],
@@ -36,6 +36,7 @@ def run_alert(orch: Orchestrator, alert: dict) -> dict:
         "own_score": risk.get("own_score"),
         "scores_disagree": risk.get("scores_disagree"),
         "ignored_signals": sorted(risk.get("ignored_signals", [])),
+        "ctr_required": risk.get("ctr",{}).get("required"),
     }
     party = alert.get("party")
     if party:
@@ -63,7 +64,8 @@ def main() -> int:
               f"{data['expected_policy_version']}. Differences are expected.")
 
     test_list = SanctionsScreener.from_policy(settings.sanctions_test_list_path, policy.sanctions_screening, "test")
-    orch = Orchestrator(policy, settings, sanctions=test_list, audit=DecisionLogger(None))
+    # agent_keys={}: this script never asks for tool permission (Tool 2), so no keys are needed.
+    orch = Orchestrator(policy, settings, sanctions=test_list, audit=DecisionLogger(None), agent_keys={})
 
     failures = 0
     for alert in data["alerts"]:

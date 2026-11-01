@@ -73,6 +73,8 @@ class ToolCallGuardrailsPolicy(StrictModel):
     # tool -> parameter -> regex the value must fully match. Listed params are required.
     parameter_rules: dict[str, dict[str, str]] = Field(default_factory=dict)
     max_parameter_chars: int = Field(default=500, gt=0)
+    # Agents prove who they are with their own secret key (AGENT_KEY_* in .env). Off before v1.4.0.
+    require_agent_keys: bool = False
     max_result_chars: int = Field(default=20000, gt=0)
     indirect_injection_patterns: PatternList = Field(default_factory=list)
 
@@ -105,13 +107,24 @@ class OutputGuardrailsPolicy(StrictModel):
     max_retries: int = Field(default=2, ge=0, le=5)
 
 
-class RiskAssessmentPolicy(StrictModel):
+
+class CTRRulePolicy(StrictModel):
+    # 31 CFR 1010.311: a Currency Transaction Report for each CASH transaction of MORE THAN
+    # the threshold. Off before v1.4.0 so older decisions stay reproducible.
+    enabled: bool = False
+    threshold: float = Field(default=10000.0, gt=0)
+    cash_types: list[str] = Field(default_factory=lambda: ["cash"])
+    citation: str = "31 CFR 1010.311"
+
+class RiskAssessmentPolicy(StrictModel):    
     # signal name -> weight; signal values are 0..1 (booleans count as 0/1)
     signal_weights: dict[str, float] = Field(min_length=1)
     large_amount_threshold: float = Field(default=10000.0, gt=0)
     large_amount_weight: float = Field(default=0.10, ge=0.0, le=1.0)
     high_risk_country_weight: float = Field(default=0.20, ge=0.0, le=1.0)
     monitored_country_weight: float = Field(default=0.0, ge=0.0, le=1.0)
+    ctr_rule: CTRRulePolicy = Field(default_factory=CTRRulePolicy)
+
 
     high_threshold: float = Field(default=0.70, ge=0.0, le=1.0)
     medium_threshold: float = Field(default=0.40, ge=0.0, le=1.0)
