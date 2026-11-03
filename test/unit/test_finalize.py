@@ -16,6 +16,7 @@ from src.config.policy_schema import GuardrailPolicy
 from src.config.settings import get_settings
 from src.core.orchestrator import Orchestrator
 from src.core.sanctions_screener import SanctionsScreener
+from src.input_guardrails.pii.regex_detector import build_log_scrubber
 from src.monitoring.decision_logger import DecisionLogger
 from src.output_guardrails.grounding.base import Grounder, GroundingResult, GroundingVerdict
 
@@ -215,3 +216,9 @@ def test_policy_cannot_turn_on_the_check_without_keys():
     data["tool_call_guardrails"]["require_agent_keys"] = False
     with pytest.raises(ValueError, match="require_agent_keys"):
         GuardrailPolicy.model_validate(data)
+
+
+def test_the_real_scrubber_keeps_a_long_digit_case_id_but_hides_other_numbers():
+    logged = DecisionLogger(None, build_log_scrubber()).log({"case_id": "DEMO-1793709325", "note": "account 1793709325"})
+    assert logged["case_id"] == "DEMO-1793709325"
+    assert logged["note"] == "account [REDACTED_NUMBER]"

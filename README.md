@@ -7,7 +7,7 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat&logo=fastapi&logoColor=white)
 ![MCP](https://img.shields.io/badge/MCP_Server-8_Tools-blue?style=flat)
 ![Python](https://img.shields.io/badge/Python-3.10+-yellow?style=flat&logo=python&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL_Audit-Planned-336791?style=flat&logo=postgresql&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Audit_+_Encrypted_Vault-336791?style=flat&logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)
 ![CI](https://github.com/Hanah7511/Finguard-LLM-Guardrails-Gateway/actions/workflows/ci.yml/badge.svg)
 ![Status](https://img.shields.io/badge/Status-In_Progress-orange?style=flat)
@@ -79,7 +79,7 @@ All requests are scanned before reaching the model. Pipeline runs in performance
 - **Safety pattern matching**
 - **PII detection and masking** (Presidio, with a checksum-validated regex fallback)
 
-> **Reversible PII masking (from policy v1.5.0).** Real values are held in FinGuard under a per-case token (`[US_SSN_1]`), in memory for now. Agents work with the token. Only Tool 8 gives real values back, and only when the case record is complete, because a SAR filed with FinCEN needs them. Names are not masked yet: the active detectors find account numbers, IBANs, SSNs, cards and emails.
+> **Reversible PII masking (from policy v1.5.0).** Real values are held in FinGuard under a per-case token (`[US_SSN_1]`), encrypted with AES-256-GCM in PostgreSQL. Memory mode remains for tests and quick local runs. Agents work with the token. Only Tool 8 gives real values back, and only when the case record is complete, because a SAR filed with FinCEN needs them. Names are not masked yet: the active detectors find account numbers, IBANs, SSNs, cards and emails.
 
 ### Layer 2 — Tool-Call Guardrails (OWASP LLM06)
 Every agent tool call passes through an allowlist check before execution, and every tool result is PII-scanned on the way out. Agent identity comes from a **per-agent secret key** (from policy v1.4.0), not the agent name, which can be forged.
@@ -243,11 +243,15 @@ finguard-llm-guardrails-gateway/
 │   ├── api/                         # FastAPI door
 │   │   ├── main.py                  # 6 endpoints, one per handle_*
 │   │   └── schemas.py               # request shapes (422 on bad input)
+│   ├── storage/
+│   │   ├── crypto.py                # AES-256-GCM for the vault
+│   │   └── postgres.py              # database vault, case record and audit log
 │   └── monitoring/
 │       ├── telemetry.py
 │       ├── decision_logger.py
 │       └── cost_tracker.py
 ├── test/
+│   ├── integration/                 # real PostgreSQL tests, skipped unless a database address is set
 │   └── unit/                        # cost-free tests: test sanctions list, no LLM, no audit file
 ├── data/
 │   ├── law_store/                   # official law texts, split by section
@@ -259,7 +263,10 @@ finguard-llm-guardrails-gateway/
 │   ├── build_sanctions_lists.py     # UN, UAE Local Terrorist List, OFAC SDN
 │   ├── run_sample_alerts.py         # runs the sample alerts, compares with expected
 │   ├── fake_agent.py                # scripted stand-in for finintel's 3 agents (MCP client)
-│   └── check_doors.py               # checks that both running doors answer
+│   ├── check_doors.py               # checks that both running doors answer
+│   └── check_restart.py             # proves a case is shared and survives a restart
+├── migrations/                      # numbered table changes, run by Alembic
+├── alembic.ini
 ├── .github/workflows/ci.yml         # runs the tests and builds the image on every push
 ├── .dockerignore                    # keeps secrets and private data out of the image
 ├── Dockerfile                       # one image for both doors (Python 3.12, CPU PyTorch, non-root)
@@ -326,8 +333,10 @@ Copy `.env.example` to `.env` and fill it in. `.env` is never committed and neve
 # LLM
 OPENAI_API_KEY=sk-...
 
-# PostgreSQL audit trail (planned)
-DATABASE_URL=postgresql://user:pass@localhost:5432/finguard_audit
+# PostgreSQL and the encrypted vault. Docker Compose builds the database address from these.
+POSTGRES_PASSWORD=...
+APP_DB_PASSWORD=...
+VAULT_MASTER_KEY=...   # 32 random bytes, base64. Losing it makes every stored real value unreadable.
 
 # Agent secret keys, one per agent. Make each with: python -c "import secrets; print(secrets.token_urlsafe(32))"
 AGENT_KEY_INVESTIGATION=inv-secret-...
@@ -370,12 +379,13 @@ The fake agent plays finintel's investigation, compliance and summarization agen
 
 ### 5. Docker
 
-Docker Desktop must be running. This builds one image and starts both doors in separate containers:
+Docker Desktop must be running. `docker compose up -d --build` starts PostgreSQL, runs the table migration once, then starts both doors:
 
 ```bash
 docker compose up -d --build       # the first build downloads PyTorch and takes several minutes
 docker compose ps                  # both should become (healthy)
 python scripts/check_doors.py      # calls the REST door (port 8000) and the MCP door (port 8001)
+python scripts/check_restart.py    # proves both doors share a case and that it survives a restart
 docker compose down                # stops them; models and audit logs stay in Docker volumes
 ```
 
@@ -384,10 +394,18 @@ docker compose down                # stops them; models and audit logs stay in D
 | Secrets | Passed from `.env` when a container starts; `.dockerignore` keeps them out of the image |
 | Real sanctions list, licensed law texts | Read-only folders mounted at run time, never stored in the image |
 | Access | Ports open on `127.0.0.1` only, because the doors have no login yet |
+| Database | No outside port. The doors log in as a limited user that can only read and add rows |
+| Audit log and case history | The database refuses edits and deletes |
 | User | Runs as a non-root user |
 | Models | Downloaded when first needed, kept in a Docker volume |
 
-**Limits for now:** each container keeps its own tokens and case records in memory, so the two doors do not share a case and `docker compose down` loses them. PostgreSQL fixes this next. There is no login on either door yet, so do not open these ports to a network.
+**Limits for now:**
+
+- There is no login on either door yet, so do not open these ports to a network.
+- Tool 8 still returns real values to its caller. A separate analyst endpoint replaces this next.
+- The master key sits in `.env`: anyone with both that file and the database can read the values. A real deployment needs a secrets manager or key service.
+- A Docker volume is not a backup.
+- Known issue: `docker compose down` once failed with a "zombie" error while stopping the doors (1 of 3 shutdowns, cause unknown). Data was not affected. Running it again finished the job.
 
 ---
 
@@ -433,7 +451,8 @@ docker compose down                # stops them; models and audit logs stay in D
 | NLI grounding | `cross-encoder/nli-deberta-v3-small` | State-of-the-art NLI without GPT dependency |
 | Safety classification | Regex + Llama Guard 1B (optional) | Fast layer-1, nuanced layer-2 |
 | Vector store | FAISS (optional, NumPy fallback) | Fast similarity search, local deployment |
-| Audit trail | JSONL today → PostgreSQL (planned) | Queryable, persistent, regulator-ready |
+| Storage | PostgreSQL + SQLAlchemy + Alembic (JSONL in memory mode) | Queryable, persistent, shared by both doors |
+| Encryption | AES-256-GCM (`cryptography`) | Stolen tables alone reveal no values, and tampering is detected |
 | LLM | OpenAI GPT-4o (configurable) | Swappable via the `LLMClient` protocol in `llm/client.py` |
 
 ### Relation to other projects
@@ -464,10 +483,11 @@ docker compose down                # stops them; models and audit logs stay in D
 - [x] Fake agent: scripted stand-in for finintel runs all 12 alerts end to end over MCP, with a `--rogue` mode (5 tests)
 - [x] Per-agent secret keys for Tool 2 (10 tests)
 - [x] Cash-only Currency Transaction Report flag in Tool 1 (7 tests)
-- [x] Reversible masking and Tool 8 `finguard_finalize_check` (20 tests). Tokens and case records are in memory, so a restart loses them; PostgreSQL comes next
+- [x] Reversible masking and Tool 8 `finguard_finalize_check`
 - [x] Pinned requirements, Docker image and Compose for both doors, GitHub Actions CI
 - [ ] Tests + evals
-- [ ] PostgreSQL audit trail
+- [x] PostgreSQL: encrypted vault, case history and append-only audit log, shared by both doors and surviving a restart
+- [ ] Analyst release endpoint, logins, required `case_id`, name masking (Step 7C)
 - [ ] `/metrics` endpoint
 
 **Planned extras (after the core):**

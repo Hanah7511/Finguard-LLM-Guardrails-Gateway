@@ -1,11 +1,14 @@
-
-# Starts both doors:  docker compose up -d --build
-# The ports open only on this computer, because the REST door has no login yet (Step 7C).
+# Starts the database and both doors:  docker compose up -d --build
+# The door ports open only on this computer, because the REST door has no login yet (Step 7C).
+# The database has no outside port at all: only the other containers can reach it.
 
 x-finguard: &finguard
   build: .
   image: finguard:local
   restart: unless-stopped
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
   env_file:
     - path: .env
       required: false
@@ -18,10 +21,39 @@ x-finguard: &finguard
     - logs:/app/logs
 
 services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: finguard
+      POSTGRES_USER: finguard_owner
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finguard_owner -d finguard"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  migrate:
+    build: .
+    image: finguard:local
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    restart: "no"
+    environment:
+      MIGRATION_DATABASE_URL: postgresql+psycopg://finguard_owner:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/finguard
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in .env}
+    depends_on:
+      db:
+        condition: service_healthy
   api:
     <<: *finguard
     environment:
       AUDIT_LOG_PATH: logs/audit-api.jsonl
+      POSTGRES_PASSWORD: ""
+      STORAGE_BACKEND: postgres
+      DATABASE_URL: postgresql+psycopg://finguard_app:${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in .env}@db:5432/finguard
+      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY:?Set VAULT_MASTER_KEY in .env}
     ports:
       - "127.0.0.1:8000:8000"
     healthcheck:
@@ -36,6 +68,10 @@ services:
     command: ["python", "-m", "src.mcp_server.server"]
     environment:
       AUDIT_LOG_PATH: logs/audit-mcp.jsonl
+      POSTGRES_PASSWORD: ""
+      STORAGE_BACKEND: postgres
+      DATABASE_URL: postgresql+psycopg://finguard_app:${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in .env}@db:5432/finguard
+      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY:?Set VAULT_MASTER_KEY in .env}
       MCP_TRANSPORT: streamable-http
       MCP_HOST: 0.0.0.0
       MCP_PORT: "8001"
@@ -51,3 +87,4 @@ services:
 volumes:
   models:
   logs:
+  pgdata:

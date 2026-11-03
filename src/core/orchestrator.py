@@ -95,8 +95,9 @@ class Orchestrator:
         self.tools = ToolCallGuardrailPipeline(policy, self.pii_detector, self._build_identity(policy, agent_keys))
         self.output = OutputGuardrailPipeline(policy, self.grounder, self.retriever, self.pii_detector)
         i = policy.input_guardrails
-        self.vault = PIIVault([*i.pii_entities, *(r.entity_type for r in i.custom_pii_recognizers)])
-        self.cases = CaseTracker()
+        self.vault, self.cases, stored_audit = self._build_storage(
+            settings, [*i.pii_entities, *(r.entity_type for r in i.custom_pii_recognizers)]
+        )
 
         s = policy.sanctions_screening
         self.risk = RiskAssessor(
@@ -106,7 +107,7 @@ class Orchestrator:
         self.ownership = OwnershipChecker(self.sanctions, s.ownership_rule)
 
         self.cost_tracker = CostTracker()
-        self.audit = audit or DecisionLogger(settings.audit_log_path, build_log_scrubber())
+        self.audit = audit or stored_audit or DecisionLogger(settings.audit_log_path, build_log_scrubber())
         self.llm = llm or build_llm_client(
             settings.openai_api_key, settings.llm_model, settings.llm_temperature, settings.llm_timeout_seconds
         )
@@ -121,6 +122,16 @@ class Orchestrator:
             self.version,
             settings.retrieval_top_k,
         )
+
+    @staticmethod
+    def _build_storage(settings: Settings, entity_types: list[str]):
+        """(vault, case record, audit log). The audit log is None in memory mode: it stays a file."""
+        if settings.storage_backend == "postgres":
+            from src.storage.postgres import build_postgres_storage
+
+            return build_postgres_storage(settings, entity_types, build_log_scrubber())
+        logger.warning("STORAGE_BACKEND=memory: a restart loses tokens and case records, and the two doors share nothing.")
+        return PIIVault(entity_types), CaseTracker(), None
 
     @staticmethod
     def _load_sanctions(settings: Settings, cfg: SanctionsScreeningPolicy) -> SanctionsScreener:

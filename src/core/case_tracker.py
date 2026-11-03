@@ -2,8 +2,8 @@
 
 Tool 8 trusts this record, not what an agent says it did. Calls without a case_id cannot be
 tracked. A sanctions block or a refused call stays on the record; a report can be fixed, so
-for grounding only the latest check counts. In memory for now (PostgreSQL in Step 7): a
-restart forgets every case, so Tool 8 then refuses them.
+for grounding only the latest check counts. This version is in memory: a
+restart forgets every case, so Tool 8 then refuses them. src/storage/postgres.py is the lasting one.
 """
 from __future__ import annotations
 
@@ -18,6 +18,16 @@ class CaseRecord:
     claims_grounded: bool = False
     sanctions_blocked: bool = False
     refused_calls: int = 0
+
+
+def steps_missing(record: CaseRecord, required_steps: Iterable[str]) -> list[str]:
+    met = {
+        "risk_assessed": record.risk_assessed,
+        "claims_grounded": record.claims_grounded,
+        "no_sanctions_block": not record.sanctions_blocked,
+        "no_refused_calls": record.refused_calls == 0,
+    }
+    return [step for step in required_steps if not met[step]]
 
 
 class CaseTracker:
@@ -57,10 +67,4 @@ class CaseTracker:
             record = self._cases.get(case_id)
             if record is None:
                 return ["case_not_found"]
-            met = {
-                "risk_assessed": record.risk_assessed,
-                "claims_grounded": record.claims_grounded,
-                "no_sanctions_block": not record.sanctions_blocked,
-                "no_refused_calls": record.refused_calls == 0,
-            }
-        return [step for step in required_steps if not met[step]]
+            return steps_missing(record, required_steps)

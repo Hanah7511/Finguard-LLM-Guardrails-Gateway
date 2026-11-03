@@ -1,4 +1,5 @@
-"""Append-only JSONL audit trail of guardrail decisions.
+"""Audit trail of guardrail decisions: an append-only JSONL file here, a table in
+src/storage/postgres.py.
 
 Callers only ever pass masked text and entity *types*. As defence in depth, every
 free-text field is run through a PII scrubber before it is written, so a bug
@@ -17,7 +18,7 @@ logger = logging.getLogger("finguard.audit")
 
 # Identifier fields that are safe and must not be altered by the scrubber.
 _UNSCRUBBED_KEYS = frozenset(
-    {"request_id", "timestamp", "policy_version", "layer", "decision", "event", "channel"}
+    {"request_id", "timestamp", "policy_version", "layer", "decision", "event", "channel", "case_id"}
 )
 
 
@@ -33,11 +34,14 @@ class DecisionLogger:
         record = {"logged_at": datetime.now(timezone.utc).isoformat(), **record}
         safe = self._scrub_value(record)
         line = json.dumps(safe, default=str, ensure_ascii=False)
+        self._write(safe, line)
+        logger.info(line)
+        return safe
+
+    def _write(self, record: dict[str, Any], line: str) -> None:
         if self._path:
             with self._lock, self._path.open("a", encoding="utf-8") as fh:
                 fh.write(line + "\n")
-        logger.info(line)
-        return safe
 
     def _scrub_value(self, value: Any, key: Optional[str] = None) -> Any:
         if isinstance(value, dict):

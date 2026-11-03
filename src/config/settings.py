@@ -5,6 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Optional
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -32,6 +33,12 @@ class Settings(BaseSettings):
     # FICTIONAL list, used only when the real lists have not been built
     sanctions_test_list_path: Path = PROJECT_ROOT / "data" / "sanctions" / "test_sanctions_list.json"
     audit_log_path: Path = PROJECT_ROOT / "logs" / "audit.jsonl"
+
+    # Storage. "memory" is for tests and quick local runs: a restart loses tokens and case records.
+    # "postgres" refuses to start without the database and the key. SecretStr keeps both out of logs.
+    storage_backend: Literal["memory", "postgres"] = "memory"
+    database_url: Optional[SecretStr] = None
+    vault_master_key: Optional[SecretStr] = None
 
     # Models (loaded lazily, only when first needed)
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"

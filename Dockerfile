@@ -16,6 +16,8 @@ RUN pip install torch==2.10.0 --index-url https://download.pytorch.org/whl/cpu \
 COPY src/ src/
 COPY scripts/ scripts/
 COPY data/ data/
+COPY alembic.ini .
+COPY migrations/ migrations/
 
 # Run as an ordinary user: if the app is ever broken into, the attacker is not root.
 RUN useradd --create-home --uid 10001 finguard \
