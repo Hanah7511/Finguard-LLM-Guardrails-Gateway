@@ -1,0 +1,53 @@
+
+# Starts both doors:  docker compose up -d --build
+# The ports open only on this computer, because the REST door has no login yet (Step 7C).
+
+x-finguard: &finguard
+  build: .
+  image: finguard:local
+  restart: unless-stopped
+  env_file:
+    - path: .env
+      required: false
+  volumes:
+    # Files that are never in the image. Whole folders, so a fresh clone without them still starts.
+    - ./data/sanctions:/app/data/sanctions:ro
+    - ./data/law_store:/app/data/law_store:ro
+    # Models are downloaded once and kept. Audit logs survive a restart.
+    - models:/home/finguard/.cache/huggingface
+    - logs:/app/logs
+
+services:
+  api:
+    <<: *finguard
+    environment:
+      AUDIT_LOG_PATH: logs/audit-api.jsonl
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  mcp:
+    <<: *finguard
+    command: ["python", "-m", "src.mcp_server.server"]
+    environment:
+      AUDIT_LOG_PATH: logs/audit-mcp.jsonl
+      MCP_TRANSPORT: streamable-http
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: "8001"
+    ports:
+      - "127.0.0.1:8001:8001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8001), timeout=5).close()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+volumes:
+  models:
+  logs:

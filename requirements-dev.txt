@@ -1,0 +1,10 @@
+# Everything in requirements.txt, plus tools for testing and for rebuilding the data files.
+-r requirements.txt
+
+# Tests
+pytest==7.4.3
+httpx==0.28.1
+
+# scripts/build_local_law_store.py and scripts/build_sanctions_lists.py
+pypdf==6.21.1
+xlrd==2.0.2

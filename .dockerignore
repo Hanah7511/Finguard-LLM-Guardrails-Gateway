@@ -1,0 +1,32 @@
+# Secrets: passed in when the container starts, never stored in the image
+**/.env
+**/.env.*
+
+# Licensed legal texts and the real sanctions list: mounted at run time, never stored in the image
+data/legal_sources/
+data/law_store/regulations_local.json
+data/sanctions/sanctions_list.json
+
+# Runtime output
+logs/
+**/*.jsonl
+
+# Not needed to run
+.git/
+.github/
+.vscode/
+.idea/
+.pytest_cache/
+**/__pycache__/
+**/*.py[cod]
+venv/
+.venv/
+env/
+models/
+**/*.faiss
+test/
+README.md
+requirements-dev.txt
+Dockerfile
+docker-compose.yml
+.dockerignore

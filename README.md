@@ -8,6 +8,8 @@
 ![MCP](https://img.shields.io/badge/MCP_Server-8_Tools-blue?style=flat)
 ![Python](https://img.shields.io/badge/Python-3.10+-yellow?style=flat&logo=python&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL_Audit-Planned-336791?style=flat&logo=postgresql&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)
+![CI](https://github.com/Hanah7511/Finguard-LLM-Guardrails-Gateway/actions/workflows/ci.yml/badge.svg)
 ![Status](https://img.shields.io/badge/Status-In_Progress-orange?style=flat)
 
 ---
@@ -256,10 +258,14 @@ finguard-llm-guardrails-gateway/
 │   ├── build_local_law_store.py     # FATF, UAE and CBUAE texts from local PDFs
 │   ├── build_sanctions_lists.py     # UN, UAE Local Terrorist List, OFAC SDN
 │   ├── run_sample_alerts.py         # runs the sample alerts, compares with expected
-│   └── fake_agent.py                # scripted stand-in for finintel's 3 agents (MCP client)
-├── Dockerfile
-├── docker-compose.yml
-└── requirements.txt
+│   ├── fake_agent.py                # scripted stand-in for finintel's 3 agents (MCP client)
+│   └── check_doors.py               # checks that both running doors answer
+├── .github/workflows/ci.yml         # runs the tests and builds the image on every push
+├── .dockerignore                    # keeps secrets and private data out of the image
+├── Dockerfile                       # one image for both doors (Python 3.12, CPU PyTorch, non-root)
+├── docker-compose.yml               # starts the REST and MCP containers
+├── requirements.txt                 # exact versions needed to run
+└── requirements-dev.txt             # adds test and data-building tools
 ```
 
 ---
@@ -300,18 +306,21 @@ Without the real sanctions file, FinGuard falls back to the fictional test list,
 
 ## Setup
 
-> ⚠️ **Not runnable yet.** These steps describe the target setup and will work once the API, MCP server and `requirements.txt` are complete. Items marked *planned* are not implemented yet.
+FinGuard runs today with Docker or plain Python. Items marked *planned* are not implemented yet. A fresh clone starts on the fictional sanctions list and the public law store; the real list and licensed texts are built locally and never committed.
 
 ### 1. Clone & install
 
 ```bash
 git clone https://github.com/Hanah7511/Finguard-LLM-Guardrails-Gateway
 cd Finguard-LLM-Guardrails-Gateway
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+python -m venv .venv
+source .venv/bin/activate      # Windows: .venv\Scriptsctivate
+pip install -r requirements.txt  # requirements-dev.txt adds the test and data-building tools
 ```
 
 ### 2. Environment variables (`.env`)
+
+Copy `.env.example` to `.env` and fill it in. `.env` is never committed and never copied into the Docker image.
 
 ```env
 # LLM
@@ -349,6 +358,7 @@ With the default `MCP_TRANSPORT=stdio` the server prints nothing and waits: an M
 
 ```bash
 # Tests for both doors (no LLM, fictional sanctions list, no audit file)
+pip install -r requirements-dev.txt
 python -m pytest test -v
 
 # A scripted agent runs all 12 sample alerts through the MCP tools (real NLI model)
@@ -360,26 +370,24 @@ The fake agent plays finintel's investigation, compliance and summarization agen
 
 ### 5. Docker
 
+Docker Desktop must be running. This builds one image and starts both doors in separate containers:
+
 ```bash
-docker-compose up --build
+docker compose up -d --build       # the first build downloads PyTorch and takes several minutes
+docker compose ps                  # both should become (healthy)
+python scripts/check_doors.py      # calls the REST door (port 8000) and the MCP door (port 8001)
+docker compose down                # stops them; models and audit logs stay in Docker volumes
 ```
 
-```yaml
-# docker-compose.yml
-services:
-  finguard:
-    build: .
-    ports: ["8000:8000"]
-    env_file: .env
-    depends_on: [postgres]
+| What | How it is handled |
+|------|-------------------|
+| Secrets | Passed from `.env` when a container starts; `.dockerignore` keeps them out of the image |
+| Real sanctions list, licensed law texts | Read-only folders mounted at run time, never stored in the image |
+| Access | Ports open on `127.0.0.1` only, because the doors have no login yet |
+| User | Runs as a non-root user |
+| Models | Downloaded when first needed, kept in a Docker volume |
 
-  postgres:
-    image: postgres:15
-    environment:
-      POSTGRES_DB: finguard_audit
-      POSTGRES_USER: finguard
-      POSTGRES_PASSWORD: your-password
-```
+**Limits for now:** each container keeps its own tokens and case records in memory, so the two doors do not share a case and `docker compose down` loses them. PostgreSQL fixes this next. There is no login on either door yet, so do not open these ports to a network.
 
 ---
 
@@ -457,6 +465,7 @@ services:
 - [x] Per-agent secret keys for Tool 2 (10 tests)
 - [x] Cash-only Currency Transaction Report flag in Tool 1 (7 tests)
 - [x] Reversible masking and Tool 8 `finguard_finalize_check` (20 tests). Tokens and case records are in memory, so a restart loses them; PostgreSQL comes next
+- [x] Pinned requirements, Docker image and Compose for both doors, GitHub Actions CI
 - [ ] Tests + evals
 - [ ] PostgreSQL audit trail
 - [ ] `/metrics` endpoint
