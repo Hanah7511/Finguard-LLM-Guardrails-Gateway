@@ -79,7 +79,7 @@ All requests are scanned before reaching the model. Pipeline runs in performance
 - **Safety pattern matching**
 - **PII detection and masking** (Presidio, with a checksum-validated regex fallback)
 
-> **Reversible PII masking (from policy v1.5.0).** Real values are held in FinGuard under a per-case token (`[US_SSN_1]`), encrypted with AES-256-GCM in PostgreSQL. Memory mode remains for tests and quick local runs. Agents work with the token. Only Tool 8 gives real values back, and only when the case record is complete, because a SAR filed with FinCEN needs them. Names are not masked yet: the active detectors find account numbers, IBANs, SSNs, cards and emails.
+> **Reversible PII masking (from policy v1.5.0).** Real values are held in FinGuard under a per-case token (`[US_SSN_1]`), encrypted with AES-256-GCM in PostgreSQL. Memory mode remains for tests and quick local runs. Agents work with the token. Only Tool 8 gives real values back, and only when the case record is complete, because a SAR filed with FinCEN needs them. From policy v1.6.0, names are masked too, in two ways: people and companies the caller lists at Tool 1 are matched exactly, and Presidio looks for other people's names. Detection is not perfect: a name that is neither listed nor found stays visible, and ordinary words are sometimes masked by mistake (it once masked "Customer IBAN"). Treat masking as one layer of protection, and keep human review. How often it misses has not been measured yet (Step 8).
 
 ### Layer 2 — Tool-Call Guardrails (OWASP LLM06)
 Every agent tool call passes through an allowlist check before execution, and every tool result is PII-scanned on the way out. Agent identity comes from a **per-agent secret key** (from policy v1.4.0), not the agent name, which can be forged.
@@ -107,14 +107,14 @@ NLI grounding against official law texts (US BSA regulations; FATF Recommendatio
 
 | # | Tool | Description |
 |---|------|-------------|
-| 01 | `finguard_assess_risk()` | Risk triage before any investigation starts. Scores alert signals against YAML weights. Returns: `LOW / MEDIUM / HIGH`. With `transaction_type`, also says if a Currency Transaction Report is required (cash of more than $10,000; a reporting duty, so it does not change the score). |
+| 01 | `finguard_assess_risk()` | Risk triage before any investigation starts. Scores alert signals against YAML weights. Returns: `LOW / MEDIUM / HIGH`. With `transaction_type`, also says if a Currency Transaction Report is required (cash of more than $10,000; a reporting duty, so it does not change the score). With `parties` and a `case_id`, stores the case's people and companies in the vault and returns only their tokens. |
 | 02 | `finguard_validate_tool_call()` | Authorizes or blocks an agent's tool request. Checks the agent's secret key, then the YAML allowlist, then the parameters. No LLM call — fast. |
 | 03 | `finguard_pii_and_compliance_check()` | PII detection and reversible masking. With a `case_id`, values become per-case tokens (`[IBAN_CODE_1]`); the same value keeps its token within a case. Uses Presidio + regex fallback. Real values stored in FinGuard, not returned. |
-| 04 | `finguard_sanctions_screen()` | Screens a person or company against the UN, UAE Local Terrorist List and OFAC SDN lists (exact + fuzzy names, aliases). Date of birth / ID number confirm or rule out a name match; a name alone goes to review, and an exact name match is only cleared on identifiers marked `identifiers_verified` (KYC). For a company, `owners` applies the OFAC 50% rule (sanctioned owners' shares added up, through chains of companies). Country risk from the FATF black and grey lists. |
+| 04 | `finguard_sanctions_screen()` | Screens a person or company against the UN, UAE Local Terrorist List and OFAC SDN lists (exact + fuzzy names, aliases). Date of birth / ID number confirm or rule out a name match; a name alone goes to review, and an exact name match is only cleared on identifiers marked `identifiers_verified` (KYC). For a company, `owners` applies the OFAC 50% rule (sanctioned owners' shares added up, through chains of companies). Country risk from the FATF black and grey lists. Accepts a token such as `[PERSON_1]`: FinGuard looks up the name itself, and the answer shows no names. |
 | 05 | `finguard_validate_grounding()` | NLI hallucination check. Agent sends claim + citation reference only — FinGuard fetches the authoritative law text. Agent cannot supply a fake source. |
 | 06 | `finguard_get_policy_info()` | Returns active policy version, last change, `approved_by`, and applicable rules. Also available via `GET /policy`. |
 | 07 | `finguard_scan_documents()` | Scans RAG-retrieved documents for indirect prompt injection — hidden instructions embedded in regulatory text or case files. |
-| 08 | `finguard_finalize_check()` | Final gate before human review. Needs the agent's key. Checks FinGuard's own record of the `case_id` against the steps required in the YAML: risk assessed, claims grounded, no sanctions block, no refused calls. Approved: the report comes back with real values restored. Refused: `missing` says why and the report stays masked. |
+| 08 | `finguard_finalize_check()` | Final gate before human review. Needs the agent's key. Checks FinGuard's own record of the `case_id` against the steps required in the YAML: risk assessed, claims grounded, no sanctions block, no refused calls. Approved: the report comes back with real values restored. Refused: `missing` says why and the report stays masked. Masks anything still readable in the report and returns the count in `values_caught`. This does not refuse the report. |
 
 ---
 
@@ -199,7 +199,8 @@ finguard-llm-guardrails-gateway/
 │   │       ├── v1.2.0_guardrail_policy.yaml
 │   │       ├── v1.3.0_guardrail_policy.yaml
 │   │       ├── v1.4.0_guardrail_policy.yaml
-│   │       ├── v1.5.0_guardrail_policy.yaml   # active
+│   │       ├── v1.5.0_guardrail_policy.yaml
+│   │       ├── v1.6.0_guardrail_policy.yaml   # active
 │   │       └── CHANGELOG.md
 │   ├── core/
 │   │   ├── orchestrator.py          # THE BRAIN — one handle_* per job
@@ -344,7 +345,7 @@ AGENT_KEY_COMPLIANCE=cmp-secret-...
 AGENT_KEY_SUMMARIZATION=sum-secret-...
 
 # Active policy version
-ACTIVE_POLICY_VERSION=1.5.0
+ACTIVE_POLICY_VERSION=1.6.0
 ```
 
 ### 3. Run FastAPI (standalone)
@@ -405,7 +406,7 @@ docker compose down                # stops them; models and audit logs stay in D
 - Tool 8 still returns real values to its caller. A separate analyst endpoint replaces this next.
 - The master key sits in `.env`: anyone with both that file and the database can read the values. A real deployment needs a secrets manager or key service.
 - A Docker volume is not a backup.
-- Known issue: `docker compose down` once failed with a "zombie" error while stopping the doors (1 of 3 shutdowns, cause unknown). Data was not affected. Running it again finished the job.
+- Known issue: `docker compose down` once failed with a "zombie" error while stopping the doors (1 of 4 shutdowns, cause unknown). Data was not affected. Running it again finished the job.
 
 ---
 
@@ -433,7 +434,7 @@ docker compose down                # stops them; models and audit logs stay in D
 | Sanctions match recall | `sanctions_screen()` | Name variation testing: Mohammed / Muhammad / Mohamed |
 | Task success rate | Full MCP flow | Scripted fake-agent now; real finintel later |
 | Policy version coverage | All decisions | Must be 100% — automatic test, not a score |
-| Policy v1.0.0 → v1.5.0 | Full eval suite | Run on every version; compare results |
+| Policy v1.0.0 → v1.6.0 | Full eval suite | Run on every version; compare results |
 | End-to-end agent run | `scripts/fake_agent.py` (12 alerts, `--rogue`) | Task success: every investigation reaches the expected outcome; rogue calls refused |
 | Sample alert regression | `data/sample_alerts/alerts.json` | `python scripts/run_sample_alerts.py` — must stay 12/12 unless a policy change explains the difference |
 
@@ -470,7 +471,7 @@ docker compose down                # stops them; models and audit logs stay in D
 **In active development.** Part of the Financial Risk Intelligence Platform portfolio.
 
 - [x] Architecture + design (dual-door, 6 guardrail layers, 8 MCP tools)
-- [x] Versioned YAML policy engine (v1.0.0 – v1.4.0, v1.5.0 active)
+- [x] Versioned YAML policy engine (v1.0.0 – v1.5.0, v1.6.0 active)
 - [x] Guardrail modules for all 6 layers (input, tool-call, output, safety, privacy, compliance)
 - [x] Security model designed (5 properties) — implementation in progress
 - [x] `orchestrator.py` — single brain for both doors (one `handle_*` per job; risk score = higher of FinGuard and upstream engine score)
@@ -487,7 +488,9 @@ docker compose down                # stops them; models and audit logs stay in D
 - [x] Pinned requirements, Docker image and Compose for both doors, GitHub Actions CI
 - [ ] Tests + evals
 - [x] PostgreSQL: encrypted vault, case history and append-only audit log, shared by both doors and surviving a restart
-- [ ] Analyst release endpoint, logins, required `case_id`, name masking (Step 7C)
+- [x] Name masking (policy v1.6.0): party list, Presidio, Tool 4 tokens, Tool 8 report re-check
+- [ ] Analyst release endpoint, logins, required `case_id` (Step 7C)
+- [ ] Measure name detection across names of different origins (Step 8)
 - [ ] `/metrics` endpoint
 
 **Planned extras (after the core):**

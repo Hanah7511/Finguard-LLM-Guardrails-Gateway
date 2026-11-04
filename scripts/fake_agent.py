@@ -91,7 +91,8 @@ async def investigate(alert: dict[str, Any], call: Call, rogue: bool = False) ->
     risk = await call("finguard_assess_risk", {
         "query": alert["query"], "signals": alert["signals"],
         "external_risk_score": alert.get("external_risk_score"),
-        "transaction_type": alert.get("transaction_type"), **case,
+        "transaction_type": alert.get("transaction_type"),
+        "parties": [{"name": alert["party"]["name"]}] if alert.get("party") else None, **case,
     })
     inv.ctr_required = bool(risk.get("ctr", {}).get("required"))
     ctr = "CTR required" if inv.ctr_required else "no CTR"
@@ -144,7 +145,9 @@ async def investigate(alert: dict[str, Any], call: Call, rogue: bool = False) ->
     review = False
     if party:
         screen = await call("finguard_sanctions_screen", {
-            "entity_name": party["name"], "country": alert["signals"].get("country"),
+            # The token from Tool 1, so the agents never hold the name.
+            "entity_name": risk["parties"][0]["token"] if risk.get("parties") else party["name"],
+            "country": alert["signals"].get("country"),
             "dob": party.get("dob"), "nationality": party.get("nationality"),
             "id_number": party.get("id_number"),
             "identifiers_verified": party.get("identifiers_verified", False), **case,

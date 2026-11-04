@@ -64,6 +64,8 @@ class InputGuardrailsPolicy(StrictModel):
     safety_patterns: PatternList = Field(min_length=1)
     pii_entities: list[str] = Field(min_length=1)
     pii_score_threshold: float = Field(default=0.4, ge=0.0, le=1.0)
+    # Names the caller lists at Tool 1 become tokens and are masked in every later text. Off before v1.6.0.
+    party_masking: bool = False
     custom_pii_recognizers: list[CustomPIIRecognizer] = Field(default_factory=list)
     llama_guard: LlamaGuardConfig = LlamaGuardConfig()
 
@@ -160,12 +162,16 @@ class SanctionsScreeningPolicy(StrictModel):
     use_identifiers: bool = False
     # An exact name match is cleared by a different DOB / ID only if they were verified (KYC).
     clear_requires_verified_identifiers: bool = False
+    # Tool 4 takes a token such as [PERSON_1] and never shows the agent the name. Off before v1.6.0.
+    accept_tokens: bool = False
     ownership_rule: OwnershipRulePolicy = Field(default_factory=OwnershipRulePolicy)
 
 
 class FinalizeCheckPolicy(StrictModel):
     # Tool 8, the last gate before human review. Off before v1.5.0.
     enabled: bool = False
+    # Scan the finished report once more and mask anything that slipped through. Off before v1.6.0.
+    recheck_report: bool = False
     allowed_agents: list[str] = Field(default_factory=list)
     required_steps: list[Literal["risk_assessed", "claims_grounded", "no_sanctions_block", "no_refused_calls"]] = Field(
         default_factory=lambda: ["risk_assessed", "claims_grounded", "no_sanctions_block", "no_refused_calls"]
@@ -191,6 +197,13 @@ class GuardrailPolicy(StrictModel):
             unknown = set(cfg.allowed_agents) - set(tools.allowlist)
             if unknown or not cfg.allowed_agents or not cfg.required_steps:
                 raise ValueError(f"finalize_check needs known allowed_agents and required_steps; unknown: {sorted(unknown)}")
+        return self
+
+    @model_validator(mode="after")
+    def _names_need_tokens(self) -> "GuardrailPolicy":
+        uses_tokens = self.input_guardrails.party_masking or self.sanctions_screening.accept_tokens
+        if uses_tokens and not self.tool_call_guardrails.reversible_masking:
+            raise ValueError("party_masking and accept_tokens need reversible_masking")
         return self
 
     @property

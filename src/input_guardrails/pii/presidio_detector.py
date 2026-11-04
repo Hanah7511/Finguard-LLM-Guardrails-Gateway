@@ -61,7 +61,10 @@ def build_pii_detector(policy: InputGuardrailsPolicy, backend: str = "auto", spa
                 spacy_model,
             )
         except Exception as exc:
-            if backend == "presidio":
+            # Regex cannot find names, so falling back would quietly leave them visible.
+            if backend == "presidio" or "PERSON" in policy.pii_entities:
                 raise
             logger.warning("Presidio unavailable (%s); using regex PII detector", exc)
+    if "PERSON" in policy.pii_entities:
+        raise RuntimeError("This policy masks names (PERSON), which needs Presidio: PII_BACKEND cannot be regex")
     return RegexPIIDetector(policy.pii_entities, policy.custom_pii_recognizers)

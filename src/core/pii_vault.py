@@ -9,7 +9,20 @@ from __future__ import annotations
 
 import re
 import threading
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Literal, Optional
+
+from pydantic import BaseModel, Field
+
+# Masked in every text once known. Each alias gets its own token, and Tool 1 says which belong together.
+NAME_TYPES = ("PERSON", "ORGANIZATION")
+_SHORTEST_NAME = 3  # shorter text matches too much by accident
+
+
+class Party(BaseModel):
+    """A person or company the caller already knows is in the case, from its own records."""
+    name: str = Field(min_length=1, max_length=300, description="Full name.")
+    type: Literal["person", "company"] = "person"
+    aliases: list[str] = Field(default_factory=list, max_length=10, description="Other spellings and short forms the records hold.")
 
 
 def same_value_key(value: str) -> str:
@@ -29,6 +42,33 @@ class BaseVault:
     def _values(self, case_id: str, tokens: set[str]) -> dict[str, str]:
         """The real values for these tokens. A token this case never issued is simply absent."""
         raise NotImplementedError
+
+    def known_values(self, case_id: str, entity_types: Iterable[str]) -> dict[str, str]:
+        """Every real value this case holds of these types: value -> token."""
+        raise NotImplementedError
+
+    def is_token(self, text: str) -> bool:
+        return bool(self._token.fullmatch(text))
+
+    def value_of(self, case_id: str, token: str) -> Optional[str]:
+        return self._values(case_id, {token}).get(token)
+
+    def mask_known(self, case_id: str, text: str, entity_types: Iterable[str] = NAME_TYPES) -> tuple[str, list[str]]:
+        """Swap values this case already knows for their tokens, whatever the capitals or spacing.
+        Exact matching, so no model is involved. Returns (text, the token of each swap)."""
+        known = {same_value_key(v): t for v, t in self.known_values(case_id, entity_types).items() if len(v) >= _SHORTEST_NAME}
+        if not known:
+            return text, []
+        values = sorted(self.known_values(case_id, entity_types), key=len, reverse=True)
+        parts = [r"\s+".join(map(re.escape, v.split())) for v in values if len(v) >= _SHORTEST_NAME]
+        pattern = re.compile(rf"(?<!\w)(?:{'|'.join(parts)})(?!\w)", re.IGNORECASE)
+        swapped: list[str] = []
+
+        def swap(match: re.Match) -> str:
+            swapped.append(known[same_value_key(match.group())])
+            return swapped[-1]
+
+        return pattern.sub(swap, text), swapped
 
     def tokenizer(self, case_id: str) -> Callable[[str, str], str]:
         return lambda entity_type, value: self.token_for(case_id, entity_type, value)
@@ -74,3 +114,8 @@ class PIIVault(BaseVault):
         with self._lock:
             stored = self._stored.get(case_id, {})
             return {token: stored[token] for token in tokens if token in stored}
+
+    def known_values(self, case_id: str, entity_types: Iterable[str]) -> dict[str, str]:
+        prefixes = tuple(f"[{t}_" for t in entity_types)
+        with self._lock:
+            return {value: token for token, value in self._stored.get(case_id, {}).items() if token.startswith(prefixes)}

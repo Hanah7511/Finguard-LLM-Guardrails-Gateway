@@ -8,10 +8,11 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# Separate steps, so changing requirements.txt does not download PyTorch again.
+RUN pip install torch==2.10.0 --index-url https://download.pytorch.org/whl/cpu
 # Copied before the code, so changing the code does not reinstall everything.
 COPY requirements.txt .
-RUN pip install torch==2.10.0 --index-url https://download.pytorch.org/whl/cpu \
-    && pip install -r requirements.txt
+RUN pip install -r requirements.txt
 
 COPY src/ src/
 COPY scripts/ scripts/

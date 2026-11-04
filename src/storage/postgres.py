@@ -69,6 +69,15 @@ class PostgresVault(BaseVault):
         return {r.token: self._cipher.decrypt(case_id, r.token, bytes(r.nonce), bytes(r.ciphertext)) for r in rows}
 
 
+    def known_values(self, case_id: str, entity_types: Iterable[str]) -> dict[str, str]:
+        with self._engine.connect() as db:
+            rows = db.execute(
+                text("SELECT token, nonce, ciphertext FROM pii_vault WHERE case_id = :case_id AND entity_type = ANY(:types)"),
+                {"case_id": case_id, "types": list(entity_types)},
+            ).all()
+        return {self._cipher.decrypt(case_id, r.token, bytes(r.nonce), bytes(r.ciphertext)): r.token for r in rows}
+
+
 class PostgresCaseTracker:
     """Adds one row per event and rebuilds the case by replaying them in order."""
 

@@ -28,3 +28,7 @@ alembic==1.18.4
 psycopg[binary]==3.3.7
 cryptography==46.0.6
 
+# Name masking
+presidio-analyzer==2.2.365
+spacy==3.8.18
+en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl

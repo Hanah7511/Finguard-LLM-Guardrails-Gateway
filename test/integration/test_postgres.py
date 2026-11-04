@@ -52,11 +52,11 @@ def postgres_settings(**changes):
     return get_settings().model_copy(update={**values, **changes})
 
 
-def door() -> Orchestrator:
+def door(policy=POLICY) -> Orchestrator:
     """A new Orchestrator knows nothing except what is in the database, like a door after a restart."""
     settings = postgres_settings()
-    test_list = SanctionsScreener.from_policy(settings.sanctions_test_list_path, POLICY.sanctions_screening, "test")
-    return Orchestrator(POLICY, settings, sanctions=test_list, grounder=FakeGrounder(), agent_keys=KEYS)
+    test_list = SanctionsScreener.from_policy(settings.sanctions_test_list_path, policy.sanctions_screening, "test")
+    return Orchestrator(policy, settings, sanctions=test_list, grounder=FakeGrounder(), agent_keys=KEYS)
 
 
 def new_case() -> str:
@@ -159,6 +159,28 @@ def test_a_token_from_another_case_is_refused():
     r = finalize(o, "Report on [IBAN_CODE_1]", b)
     assert r["missing"] == ["unknown_tokens"]
     assert IBAN not in json.dumps(r)
+
+
+# Names (policy v1.6.0)
+
+def test_a_party_list_survives_a_restart_and_reaches_the_other_door(owner):
+    case, names = new_case(), load_policy("1.6.0")
+    parties = [{"name": "Fictiva Trading LLC", "type": "company"}]
+    risk = door(names).handle_assess_risk("Review this alert", {"structuring_flag": 1}, case_id=case, parties=parties)
+    assert risk["parties"][0]["token"] == "[ORGANIZATION_1]"
+    assert door(names).handle_pii_check("Paid to fictiva trading llc", case)["masked_text"] == "Paid to [ORGANIZATION_1]"
+    with owner.connect() as db:
+        rows = db.execute(text("SELECT ciphertext, entity_type FROM pii_vault WHERE case_id = :c"), {"c": case}).all()
+    assert [r.entity_type for r in rows] == ["ORGANIZATION"]
+    assert b"Fictiva" not in bytes(rows[0].ciphertext)
+
+
+def test_a_token_is_screened_after_a_restart_without_showing_the_name():
+    case, names = new_case(), load_policy("1.6.0")
+    door(names).handle_assess_risk("Review this alert", {"structuring_flag": 1}, case_id=case, parties=[{"name": "Khalid Testani"}])
+    r = door(names).handle_sanctions_screen("[PERSON_1]", case_id=case, dob="1975-05-05")
+    assert r["recommendation"] == "block_and_escalate"
+    assert "Testani" not in json.dumps(r)
 
 
 # Two doors at the same moment

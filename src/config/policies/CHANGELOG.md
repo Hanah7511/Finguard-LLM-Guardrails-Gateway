@@ -3,6 +3,15 @@
 Every policy change gets a new versioned file, an entry here and a git commit.
 Old versions stay in place: reports record the version they were validated under.
 
+## 1.6.0 — 2026-11-03
+Approved by: compliance-team
+
+- Added `PERSON` to `pii_entities`: names are masked as tokens such as `[PERSON_1]`. This needs Presidio, and FinGuard refuses to start without it rather than leave names visible.
+- Added `party_masking`: people and companies listed at Tool 1 are masked in every later text by exact match, with no model involved.
+- Added `accept_tokens`: Tool 4 screens a token, and its answer shows no names.
+- Added `recheck_report`: Tool 8 masks anything still readable in the report and reports the count.
+- Name detection is not perfect: a name that is neither listed nor found stays visible.
+
 ## 1.5.0 — 2026-11-01 (active)
 Approved by: compliance-team
 

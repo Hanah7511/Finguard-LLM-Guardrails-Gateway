@@ -72,7 +72,13 @@ def chat(req: ChatRequest, orch: Orchestrator = Depends(get_orchestrator)) -> di
 @app.post("/assess-risk")
 def assess_risk(req: AssessRiskRequest, orch: Orchestrator = Depends(get_orchestrator)) -> dict[str, Any]:
     """Tool 1 over HTTP. An upstream engine posts its alert here."""
-    return orch.handle_assess_risk(req.query, req.signals, req.external_risk_score, req.case_id, req.transaction_type)
+    parties = [p.model_dump() for p in req.parties] if req.parties else None
+    try:
+        return orch.handle_assess_risk(
+            req.query, req.signals, req.external_risk_score, req.case_id, req.transaction_type, parties
+        )
+    except ValueError as exc:  # e.g. parties without a case_id
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.post("/sanctions-screen")

@@ -10,6 +10,7 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 from src.core.ownership import Owner
+from src.core.pii_vault import Party
 
 
 class CaseRequest(BaseModel):
@@ -37,6 +38,8 @@ class AssessRiskRequest(CaseRequest):
     external_risk_score: Optional[float] = Field(default=None, ge=0.0, le=1.0, examples=[0.78])
     # cash, wire, card... A Currency Transaction Report applies to cash only.
     transaction_type: Optional[str] = Field(default=None, max_length=50, examples=["wire"])
+    # People and companies in the case, from the caller's records. Needs case_id.
+    parties: Optional[list[Party]] = Field(default=None, max_length=50, examples=[[{"name": "Clara Openfield", "type": "person"}]])
 
 
 class SanctionsScreenRequest(CaseRequest):

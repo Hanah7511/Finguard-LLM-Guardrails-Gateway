@@ -19,7 +19,7 @@ from src.config.settings import Settings, get_settings
 from src.core.case_tracker import CaseTracker
 from src.core.guardrail_pipeline import GuardrailPipeline
 from src.core.ownership import OwnerResult, OwnershipChecker
-from src.core.pii_vault import PIIVault
+from src.core.pii_vault import NAME_TYPES, PIIVault
 from src.core.risk_assessor import RiskAssessor
 from src.core.sanctions_screener import SanctionsScreener
 from src.input_guardrails.pii.base import PIIDetector
@@ -61,6 +61,13 @@ def _owner_out(o: OwnerResult) -> dict[str, Any]:
     }
 
 
+def _hide_owner_names(owner: dict[str, Any], from_tokens: dict[str, str]) -> dict[str, Any]:
+    return {
+        **owner, "name": from_tokens.get(owner["name"], "[HIDDEN]"), "listed_name": None,
+        "owners": [_hide_owner_names(o, from_tokens) for o in owner["owners"]],
+    }
+
+
 def new_request_id() -> str:
     return f"REQ-{uuid.uuid4().hex[:12].upper()}"
 
@@ -96,7 +103,8 @@ class Orchestrator:
         self.output = OutputGuardrailPipeline(policy, self.grounder, self.retriever, self.pii_detector)
         i = policy.input_guardrails
         self.vault, self.cases, stored_audit = self._build_storage(
-            settings, [*i.pii_entities, *(r.entity_type for r in i.custom_pii_recognizers)]
+            settings,
+            [*i.pii_entities, *(r.entity_type for r in i.custom_pii_recognizers), *(NAME_TYPES if i.party_masking else ())],
         )
 
         s = policy.sanctions_screening
@@ -236,8 +244,12 @@ class Orchestrator:
         external_risk_score: Optional[float] = None,
         case_id: Optional[str] = None,
         transaction_type: Optional[str] = None,
+        parties: Optional[list[dict[str, Any]]] = None,
     ) -> dict[str, Any]:
-        """Tool 1. Quick pattern scan of the query, then weighted risk scoring and the CTR rule."""
+        """Tool 1. Quick pattern scan of the query, then weighted risk scoring and the CTR rule.
+        Parties the caller lists become tokens. Raises ValueError for parties without a case_id."""
+        if parties and not case_id and self.policy.input_guardrails.party_masking:
+            raise ValueError("parties need a case_id: their tokens belong to a case")
         decisions = []
         for check in (self.input.injection, self.input.safety_patterns):
             decision = check.check(query)
@@ -257,7 +269,11 @@ class Orchestrator:
         assessment = self.risk.assess(signals, external_risk_score, transaction_type)
         decisions.append(assessment.decision)
         self.cases.risk_assessed(case_id)
-        request_id = self._audit("assess_risk", decisions, case_id , risk_level=assessment.risk_level, ctr_required=assessment.ctr["required"])
+        party_tokens = self._register_parties(case_id, parties)
+        request_id = self._audit(
+            "assess_risk", decisions, case_id, risk_level=assessment.risk_level,
+            ctr_required=assessment.ctr["required"], parties_masked=len(party_tokens),  # a count, never the names
+        )
         return {
             "request_id": request_id,
             "risk_score": assessment.risk_score,
@@ -269,8 +285,23 @@ class Orchestrator:
             "risk_signals": sorted(assessment.contributing_signals),
             "ignored_signals": assessment.ignored_signals,
             "ctr": assessment.ctr,
+            "parties": party_tokens,
             "policy_version": self.version,
         }
+
+    def _register_parties(self, case_id: Optional[str], parties: Optional[list[dict[str, Any]]]) -> list[dict[str, Any]]:
+        """Store each party's names in the vault and return only their tokens."""
+        if not parties or not self.policy.input_guardrails.party_masking:
+            return []
+        registered = []
+        for party in parties:
+            entity = "ORGANIZATION" if party.get("type") == "company" else "PERSON"
+            registered.append({
+                "token": self.vault.token_for(case_id, entity, party["name"]),
+                "type": party.get("type", "person"),
+                "aliases": [self.vault.token_for(case_id, entity, a) for a in party.get("aliases") or []],
+            })
+        return registered
 
     def handle_validate_tool_call(
         self,
@@ -304,6 +335,9 @@ class Orchestrator:
         Tokens need a case to belong to: without a case_id the values are masked for good."""
         self.cases.seen(case_id)
         reversible = bool(self.policy.tool_call_guardrails.reversible_masking and case_id)
+        known_found: list[str] = []
+        if reversible and self.policy.input_guardrails.party_masking:
+            text, known_found = self.vault.mask_known(case_id, text)
         r = self.tools.validate_result(text, self.vault.tokenizer(case_id) if reversible else None)
         problems = [d.layer for d in r.decisions if d.decision is Decision.BLOCK]
         request_id = self._audit("pii_check", r.decisions, case_id, safe_to_use=r.safe_to_use)
@@ -311,7 +345,7 @@ class Orchestrator:
             "request_id": request_id,
             "masked_text": r.masked_text,
             "reversible": reversible,
-            "pii_found": r.pii_found,
+            "pii_found": sorted({*r.pii_found, *(t[1:].rsplit("_", 1)[0] for t in known_found)}),
             "safe_to_use": r.safe_to_use,
             "problems": problems,
             "policy_version": self.version,
@@ -322,7 +356,12 @@ class Orchestrator:
         owners: Optional[list[dict[str, Any]]] = None, identifiers_verified: bool = False,
     ) -> dict[str, Any]:
         """Tool 4. Exact + fuzzy screening against the configured lists, then the
-        ownership rule when owners are given. Raises ValueError for impossible shares."""
+        ownership rule when owners are given. Raises ValueError for impossible shares or a token
+        this case never issued. If a token was sent, the answer never shows a name."""
+        from_tokens: dict[str, str] = {}
+        entity_name = self._name_from_token(case_id, entity_name, from_tokens)
+        if owners:
+            owners = self._owners_from_tokens(case_id, owners, from_tokens)
         r = self.sanctions.screen(entity_name, country, dob, nationality, id_number, identifiers_verified)
         recommendation, ownership, trace = r.recommendation, None, ""
         if owners:
@@ -359,6 +398,8 @@ class Orchestrator:
         if recommendation == "block_and_escalate":
             self.cases.sanctions_blocked(case_id)
         request_id = self._audit("sanctions_screen", [decision], case_id, recommendation=recommendation)
+        if from_tokens and ownership and ownership.get("owners"):
+            ownership["owners"] = [_hide_owner_names(o, from_tokens) for o in ownership["owners"]]
         return {
             "request_id": request_id,
             "match_found": r.match_found,
@@ -366,7 +407,7 @@ class Orchestrator:
             "checked_lists": r.checked_lists,
             "list_source": self.sanctions.source,
             "matches": [
-                {"listed_name": m.name, "list": m.list_name, "program": m.program, "score": m.score, "status": m.status, "reason": m.reason,}
+                {"listed_name": None if from_tokens else m.name, "list": m.list_name, "program": m.program, "score": m.score, "status": m.status, "reason": m.reason,}
                 for m in r.matches
             ],
             "country_risk": r.country_risk,
@@ -376,6 +417,23 @@ class Orchestrator:
             "ownership": ownership,
             "policy_version": self.version,
         }
+
+    def _name_from_token(self, case_id: Optional[str], name: str, from_tokens: dict[str, str]) -> str:
+        """The real name behind a token, remembered so the answer can hide it. Other text is returned as it is."""
+        if not (self.policy.sanctions_screening.accept_tokens and self.vault.is_token(name)):
+            return name
+        value = self.vault.value_of(case_id, name) if case_id else None
+        if value is None:
+            raise ValueError(f"{name} is not a token of this case")
+        from_tokens[value] = name
+        return value
+
+    def _owners_from_tokens(self, case_id: Optional[str], owners: list[dict[str, Any]], from_tokens: dict[str, str]) -> list[dict[str, Any]]:
+        return [
+            {**o, "name": self._name_from_token(case_id, o["name"], from_tokens),
+             "owners": self._owners_from_tokens(case_id, o.get("owners") or [], from_tokens)}
+            for o in owners
+        ]
 
     def handle_validate_grounding(self, claims: list[dict[str, str]], case_id: Optional[str] = None) -> dict[str, Any]:
         """Tool 5. Each claim is checked against FinGuard's OWN copy of the cited law."""
@@ -437,7 +495,7 @@ class Orchestrator:
         values. A refused report stays masked, and an unverified caller gets no report at all."""
         cfg = self.policy.finalize_check
         decisions: list[GuardrailDecision] = []
-        report, missing, unknown, restored, verified = None, [], [], 0, None
+        report, missing, unknown, restored, verified, caught = None, [], [], 0, None, 0
         if not cfg.enabled:
             reason = f"finalize_check is off in policy {self.version}"
         else:
@@ -450,6 +508,8 @@ class Orchestrator:
                 reason = "agent_not_allowed_to_finalize"
             else:
                 missing = self.cases.missing(case_id, cfg.required_steps)
+                if cfg.recheck_report:
+                    report_text, caught = self._recheck_report(case_id, report_text)
                 final_text, restored, unknown = self.vault.restore(case_id, report_text)
                 if unknown:  # a token this case never issued: the report would go out with a blank in it
                     missing.append("unknown_tokens")
@@ -463,7 +523,7 @@ class Orchestrator:
             layer="compliance.finalize",
             decision=Decision.PASS if approved else Decision.BLOCK,
             # Step names and a count only: the report and its values never reach the audit trail.
-            reasoning_trace=f"{reason} missing={','.join(missing) or 'none'} tokens_restored={restored}",
+            reasoning_trace=f"{reason} missing={','.join(missing) or 'none'} tokens_restored={restored} values_caught={caught}",
             policy_version=self.version,
         ))
         request_id = self._audit(
@@ -476,9 +536,17 @@ class Orchestrator:
             "missing": missing,
             "unknown_tokens": unknown,
             "tokens_restored": restored,
+            "values_caught": caught,  # real values the writer left in the report: a sign something slipped through
             "report_text": report,
             "policy_version": self.version,
         }
+
+    def _recheck_report(self, case_id: str, report_text: str) -> tuple[str, int]:
+        """Mask anything still readable in the report. This does not refuse the report: a wrong
+        guess by the detector must not hold up a good one, so the count is reported instead."""
+        text, known = self.vault.mask_known(case_id, report_text)
+        result = self.pii_detector.mask(text, self.vault.tokenizer(case_id))
+        return result.masked_text, len(known) + len(result.entities)
 
     def handle_get_policy_info(self) -> dict[str, Any]:
         """Tool 6 and GET /policy. Which rules are active, for audit traceability."""

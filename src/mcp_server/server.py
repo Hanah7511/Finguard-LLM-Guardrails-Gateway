@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from src.config.settings import get_settings
 from src.core.orchestrator import Orchestrator, get_orchestrator
 from src.core.ownership import Owner
+from src.core.pii_vault import Party
 
 CaseId = Annotated[
     Optional[str],
@@ -58,11 +59,18 @@ def create_server(orchestrator: Optional[Orchestrator] = None) -> MCPServer:
         external_risk_score: Annotated[Optional[float], Field(ge=0.0, le=1.0, description="The detection engine's own score (0 to 1), if it gave one.")] = None,
         transaction_type: Annotated[Optional[str], Field(max_length=50, description="cash, wire, card, transfer... Needed to tell whether a Currency Transaction Report is required (cash only).")] = None,
         case_id: CaseId = None,
+        parties: Annotated[Optional[list[Party]], Field(max_length=50, description="People and companies in this case, from your records. Their names are masked in every later text, and parties in the answer gives their tokens. Needs case_id.")] = None,
     ) -> dict[str, Any]:
         """Tool 1. Score a new alert LOW / MEDIUM / HIGH before the investigation starts.
         Use first, once per alert. Signals FinGuard has no rule for come back in ignored_signals.
         ctr.required tells whether a Currency Transaction Report must be filed."""
-        return orch.handle_assess_risk(query, signals, external_risk_score, case_id, transaction_type)
+        try:
+            return orch.handle_assess_risk(
+                query, signals, external_risk_score, case_id, transaction_type,
+                [p.model_dump() for p in parties] if parties else None,
+            )
+        except ValueError as exc:
+            raise ToolError(str(exc)) from exc
     
     @mcp.tool(annotations=_CHECK)
     def finguard_validate_tool_call(
@@ -90,7 +98,7 @@ def create_server(orchestrator: Optional[Orchestrator] = None) -> MCPServer:
 
     @mcp.tool(annotations=_CHECK)
     def finguard_sanctions_screen(
-        entity_name: Annotated[str, Field(min_length=1, max_length=300, description="Full name of the person or company.")],
+        entity_name: Annotated[str, Field(min_length=1, max_length=300, description="Full name of the person or company, or its token such as [PERSON_1]. A token needs case_id, and the answer then shows no names.")],
         country: Annotated[Optional[str], Field(description="Country linked to the party or payment.")] = None,
         dob: Annotated[Optional[str], Field(description="Date of birth, YYYY-MM-DD or YYYY. Helps rule out a false match.")] = None,
         nationality: Annotated[Optional[str], Field(description="Nationality, if known.")] = None,

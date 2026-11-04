@@ -1,9 +1,14 @@
 """Swappable PII detector interface. Implement ``detect`` to plug in a new backend."""
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Callable, Optional
+
+
+# Text that is already masked, such as [PERSON_1] or [IBAN_CODE]. It must not be masked again.
+_ALREADY_MASKED = re.compile(r"\[[A-Z][A-Z_]*(?:_\d+)?\]")
 
 
 @dataclass(frozen=True)
@@ -37,7 +42,9 @@ class PIIDetector(ABC):
 
     def mask(self, text: str, token_for: Optional[Callable[[str, str], str]] = None) -> PIIResult:
         """Replace each detected span with ``[ENTITY_TYPE]``, or with ``token_for(type, value)`` if given."""
-        kept = sorted(_resolve_overlaps(self.detect(text)), key=lambda e: e.start)
+        masked_spans = [m.span() for m in _ALREADY_MASKED.finditer(text)]
+        found = [e for e in self.detect(text) if all(e.end <= a or e.start >= b for a, b in masked_spans)]
+        kept = sorted(_resolve_overlaps(found), key=lambda e: e.start)
         # Tokens are made in reading order, so the first value in the text gets number 1.
         labels = [token_for(e.entity_type, text[e.start : e.end]) if token_for else f"[{e.entity_type}]" for e in kept]
         masked = text
