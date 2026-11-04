@@ -76,7 +76,7 @@ class Investigation:
     steps: list[str] = field(default_factory=list)
     refused: int = 0  # tool calls FinGuard refused
     ctr_required: bool = False  # a cash report is due whatever the outcome: it is a duty, not suspicion
-    final_report: str = ""  # real values restored by Tool 8: for human review, never back into an LLM
+    final_report: str = ""  # the approved report for human review. Still masked: only an analyst gets real values
 
     def log(self, agent: str, text: str) -> None:
         self.steps.append(f"  [{agent}] {text}")

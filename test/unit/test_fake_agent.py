@@ -57,11 +57,11 @@ def test_poisoned_case_file_is_dropped(server):
     assert any("flagged [1]" in step for step in inv.steps)
 
 
-def test_ready_report_has_the_real_values_back():
+def test_ready_report_stays_masked_for_the_agents():
     inv = outcomes(build_server(FakeGrounder()))["ALT-2026-001"]
     assert inv.outcome == READY
-    assert "GB82 WEST 1234 5698 7654 32" in inv.final_report
-    assert "[IBAN_CODE_1]" not in inv.final_report
+    assert "GB82 WEST 1234 5698 7654 32" not in inv.final_report
+    assert "[IBAN_CODE_1]" in inv.final_report
 
 
 def test_rogue_agent_is_refused_and_false_claim_holds_the_report():

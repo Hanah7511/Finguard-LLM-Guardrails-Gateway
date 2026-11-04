@@ -3,6 +3,14 @@
 Every policy change gets a new versioned file, an entry here and a git commit.
 Old versions stay in place: reports record the version they were validated under.
 
+## 1.8.0 — 2026-11-04
+Approved by: compliance-team
+
+- Added `return_real_values: false`: Tool 8 keeps approved reports masked, so the AI side never receives real values.
+- Added `analyst_release` and `POST /cases/{case_id}/release`: a named analyst with their own key gets the real values. It is REST only, never an MCP tool.
+- Only the exact report Tool 8 approved can be released, and the case is checked again at release.
+- The audit log records which analyst released a report, and never its contents.
+
 ## 1.7.0 — 2026-11-04
 Approved by: compliance-team
 

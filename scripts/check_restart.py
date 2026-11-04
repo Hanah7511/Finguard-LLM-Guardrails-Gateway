@@ -53,6 +53,16 @@ async def start() -> None:
     print("\nCase id:", case_id)
 
 
+def rest_release(case_id: str, report: str) -> None:
+    """Plays the analyst. Real values come only from here, and only with an analyst key."""
+    request = urllib.request.Request(
+        f"http://127.0.0.1:8000/cases/{case_id}/release", data=json.dumps({"report_text": report}).encode(),
+        headers={"Content-Type": "application/json", "X-API-Key": secret("FINGUARD_API_KEY"), "X-Analyst-Key": secret("ANALYST_KEY_PRIMARY")},
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        print("analyst gets:   ", json.load(response)["report_text"])
+
+
 async def finish(case_id: str) -> None:
     async with Client(MCP_URL) as client:
         result = await client.call_tool("finguard_finalize_check", {
@@ -63,8 +73,9 @@ async def finish(case_id: str) -> None:
     r = result.structured_content
     print("approved:       ", r["approved"])
     print("missing:        ", r["missing"])
-    print("tokens restored:", r["tokens_restored"])
-    print("report:         ", r["report_text"])
+    print("agent gets:     ", r["report_text"])
+    if r["approved"]:
+        rest_release(case_id, r["report_text"])
 
 
 if __name__ == "__main__":

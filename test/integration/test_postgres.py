@@ -183,6 +183,22 @@ def test_a_token_is_screened_after_a_restart_without_showing_the_name():
     assert "Testani" not in json.dumps(r)
 
 
+# Analyst release (policy v1.8.0)
+
+def test_a_report_approved_before_a_restart_can_be_released_after_it():
+    case, policy = new_case(), load_policy("1.8.0")
+    keys = {"primary": "test-analyst-key-not-real-0001"}
+    def build():
+        settings = postgres_settings()
+        test_list = SanctionsScreener.from_policy(settings.sanctions_test_list_path, policy.sanctions_screening, "test")
+        return Orchestrator(policy, settings, sanctions=test_list, grounder=FakeGrounder(), agent_keys=KEYS, analyst_keys=keys)
+    o = build()
+    masked = do_required_steps(o, case)
+    assert finalize(o, masked, case)["report_text"] == masked
+    r = build().handle_release(case, masked, keys["primary"])
+    assert (r["released"], r["report_text"]) == (True, RAW)
+
+
 # Two doors at the same moment
 
 def test_many_writers_get_one_token_for_one_value(app):

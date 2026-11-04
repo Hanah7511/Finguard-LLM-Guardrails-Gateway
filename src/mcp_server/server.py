@@ -182,8 +182,8 @@ def create_server(orchestrator: Optional[Orchestrator] = None) -> MCPServer:
     ) -> dict[str, Any]:
         """Tool 8. The last gate before human review. FinGuard checks its own record of the case:
         risk assessed, claims grounded, no sanctions block, no refused calls. If approved is true,
-        report_text comes back with the real values restored: it must go from your code to human
-        review and never back into an LLM. If false, missing lists what to do and the report stays masked."""
+        send report_text to a human analyst: under the active policy it stays masked, and only the
+        analyst can get the real values. If false, missing lists what to do."""
         allow_case(case_id)
         return orch.handle_finalize_check(agent_name, report_text, case_id, agent_key)
 

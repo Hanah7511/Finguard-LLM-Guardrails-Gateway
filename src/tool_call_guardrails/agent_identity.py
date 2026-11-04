@@ -30,6 +30,11 @@ def key_env_name(agent: str) -> str:
     return "AGENT_KEY_" + re.sub(r"_AGENT$", "", agent.upper())
 
 
+def analyst_key_env_name(analyst: str) -> str:
+    """primary -> ANALYST_KEY_PRIMARY"""
+    return "ANALYST_KEY_" + analyst.upper()
+
+
 class AgentIdentity:
     layer = "tool.identity"
 
@@ -49,12 +54,12 @@ class AgentIdentity:
         self._policy_version = policy_version
 
     @classmethod
-    def from_env(cls, agents: Iterable[str], policy_version: str, env_file: str = ".env") -> "AgentIdentity":
+    def from_env(cls, agents: Iterable[str], policy_version: str, env_file: str = ".env", key_name=key_env_name) -> "AgentIdentity":
         """Read AGENT_KEY_* for each agent from the environment, else from .env."""
         file_values = dotenv_values(env_file) if os.path.exists(env_file) else {}
         keys, missing = {}, []
         for agent in agents:
-            name = key_env_name(agent)
+            name = key_name(agent)
             key = os.environ.get(name) or file_values.get(name)
             if key:
                 keys[agent] = key
@@ -63,6 +68,9 @@ class AgentIdentity:
         if missing:
             logger.warning("No agent key set for %s; calls from those agents will be refused.", ", ".join(missing))
         return cls(keys, policy_version)
+
+    def has_key(self, name: str) -> bool:
+        return name in self._keys
 
     def owner(self, key: Optional[str]) -> Optional[str]:
         """The agent this key belongs to, or None. Checks every key so timing shows nothing."""

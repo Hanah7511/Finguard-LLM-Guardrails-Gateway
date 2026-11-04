@@ -42,6 +42,11 @@ class AssessRiskRequest(CaseRequest):
     parties: Optional[list[Party]] = Field(default=None, max_length=50, examples=[[{"name": "Clara Openfield", "type": "person"}]])
 
 
+class ReleaseRequest(BaseModel):
+    # The exact masked report Tool 8 approved.
+    report_text: str = Field(min_length=1, max_length=100000, examples=["Deposit from IBAN [IBAN_CODE_1]."])
+
+
 class SanctionsScreenRequest(CaseRequest):
     entity_name: str = Field(min_length=1, max_length=300, examples=["Viktor Sampleov"])
     country: Optional[str] = Field(default=None, max_length=100, examples=["Canada"])

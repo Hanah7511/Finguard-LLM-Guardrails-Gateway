@@ -108,6 +108,20 @@ class PostgresCaseTracker:
     def call_refused(self, case_id: Optional[str]) -> None:
         self._add(case_id, "call_refused")
 
+    def report_approved(self, case_id: str, report_hash: str) -> None:
+        self._add(case_id, "report_approved", {"report_hash": report_hash})
+
+    def report_released(self, case_id: str, analyst: str) -> None:
+        self._add(case_id, "report_released", {"analyst": analyst})
+
+    def approved_reports(self, case_id: str) -> set[str]:
+        with self._engine.connect() as db:
+            rows = db.execute(
+                text("SELECT detail FROM case_events WHERE case_id = :case_id AND event = 'report_approved'"),
+                {"case_id": case_id},
+            ).all()
+        return {row.detail["report_hash"] for row in rows}
+
     def missing(self, case_id: str, required_steps: Iterable[str]) -> list[str]:
         with self._engine.connect() as db:
             rows = db.execute(

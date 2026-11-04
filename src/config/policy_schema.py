@@ -170,12 +170,20 @@ class SanctionsScreeningPolicy(StrictModel):
 class FinalizeCheckPolicy(StrictModel):
     # Tool 8, the last gate before human review. Off before v1.5.0.
     enabled: bool = False
+    # True before v1.8.0: Tool 8 hands back real values. False: only an analyst can get them.
+    return_real_values: bool = True
     # Scan the finished report once more and mask anything that slipped through. Off before v1.6.0.
     recheck_report: bool = False
     allowed_agents: list[str] = Field(default_factory=list)
     required_steps: list[Literal["risk_assessed", "claims_grounded", "no_sanctions_block", "no_refused_calls"]] = Field(
         default_factory=lambda: ["risk_assessed", "claims_grounded", "no_sanctions_block", "no_refused_calls"]
     )
+
+
+class AnalystReleasePolicy(StrictModel):
+    # POST /cases/{case_id}/release: real values go to a named analyst only. Off before v1.8.0.
+    enabled: bool = False
+    allowed_analysts: list[str] = Field(default_factory=list)  # each has its own ANALYST_KEY_<NAME>
 
 
 class AccessControlPolicy(StrictModel):
@@ -204,6 +212,7 @@ class GuardrailPolicy(StrictModel):
     sanctions_screening: SanctionsScreeningPolicy
     finalize_check: FinalizeCheckPolicy = Field(default_factory=FinalizeCheckPolicy)
     access_control: AccessControlPolicy = Field(default_factory=AccessControlPolicy)
+    analyst_release: AnalystReleasePolicy = Field(default_factory=AnalystReleasePolicy)
 
     @model_validator(mode="after")
     def _finalize_needs_keys_and_tokens(self) -> "GuardrailPolicy":
@@ -215,6 +224,15 @@ class GuardrailPolicy(StrictModel):
             unknown = set(cfg.allowed_agents) - set(tools.allowlist)
             if unknown or not cfg.allowed_agents or not cfg.required_steps:
                 raise ValueError(f"finalize_check needs known allowed_agents and required_steps; unknown: {sorted(unknown)}")
+        return self
+
+    @model_validator(mode="after")
+    def _release_rules(self) -> "GuardrailPolicy":
+        release, final = self.analyst_release, self.finalize_check
+        if release.enabled and not (final.enabled and release.allowed_analysts):
+            raise ValueError("analyst_release needs finalize_check and at least one allowed analyst")
+        if not final.return_real_values and not (release.enabled and final.recheck_report):
+            raise ValueError("return_real_values: false needs analyst_release and recheck_report")
         return self
 
     @model_validator(mode="after")

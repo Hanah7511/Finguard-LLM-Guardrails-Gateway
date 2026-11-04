@@ -7,6 +7,7 @@ handle_* method runs only the checks that request needs, writes one audit record
 """
 from __future__ import annotations
 
+import hashlib
 import hmac
 import re
 import logging
@@ -37,7 +38,7 @@ from src.output_guardrails.grounding.base import Grounder, GroundingVerdict
 from src.output_guardrails.grounding.cosine_grounding import CosineGrounder
 from src.output_guardrails.grounding.nli_grounding import NLIGrounder
 from src.output_guardrails.pipeline import OutputGuardrailPipeline
-from src.tool_call_guardrails.agent_identity import MIN_KEY_CHARS
+from src.tool_call_guardrails.agent_identity import MIN_KEY_CHARS, analyst_key_env_name
 from src.tool_call_guardrails.agent_identity import AgentIdentity
 from src.tool_call_guardrails.pipeline import ToolCallGuardrailPipeline
 from src.vector_store.retriever import Embedder, RegulationRetriever, SentenceTransformerEmbedder
@@ -71,6 +72,11 @@ def _hide_owner_names(owner: dict[str, Any], from_tokens: dict[str, str]) -> dic
     }
 
 
+def _report_hash(report_text: str) -> str:
+    """A fingerprint of the masked report, so a release can prove it is what Tool 8 approved."""
+    return hashlib.sha256(report_text.encode()).hexdigest()
+
+
 class AccessDenied(Exception):
     """A call refused at the door. It says why, and never contains a key."""
 
@@ -93,6 +99,7 @@ class Orchestrator:
         audit: Optional[DecisionLogger] = None,
         safety_model: Optional[SafetyModel] = None,
         agent_keys: Optional[Mapping[str, str]] = None,
+        analyst_keys: Optional[Mapping[str, str]] = None,
     ) -> None:
         # Every argument after `settings` is optional so tests can plug in fakes.
         self.policy = policy
@@ -107,6 +114,7 @@ class Orchestrator:
 
         self.input = InputGuardrailPipeline(policy, self.pii_detector, safety_model)
         self.tools = ToolCallGuardrailPipeline(policy, self.pii_detector, self._build_identity(policy, agent_keys))
+        self.analysts = self._build_analysts(policy, analyst_keys)
         self.output = OutputGuardrailPipeline(policy, self.grounder, self.retriever, self.pii_detector)
         i = policy.input_guardrails
         self.vault, self.cases, stored_audit = self._build_storage(
@@ -162,6 +170,16 @@ class Orchestrator:
             )
             path, source = settings.sanctions_test_list_path, "test"
         return SanctionsScreener.from_policy(path, cfg, source)
+
+    @staticmethod
+    def _build_analysts(policy: GuardrailPolicy, analyst_keys: Optional[Mapping[str, str]]) -> Optional[AgentIdentity]:
+        """Who may release real values. Tests pass their own keys; otherwise ANALYST_KEY_* from .env."""
+        cfg = policy.analyst_release
+        if not cfg.enabled:
+            return None
+        if analyst_keys is not None:
+            return AgentIdentity(analyst_keys, policy.version)
+        return AgentIdentity.from_env(cfg.allowed_analysts, policy.version, key_name=analyst_key_env_name)
 
     @staticmethod
     def _build_identity(policy: GuardrailPolicy, agent_keys: Optional[Mapping[str, str]]) -> Optional[AgentIdentity]:
@@ -536,8 +554,9 @@ class Orchestrator:
     def handle_finalize_check(
         self, agent_name: str, report_text: str, case_id: str, agent_key: Optional[str] = None
     ) -> dict[str, Any]:
-        """Tool 8. The last gate: checks FinGuard's own record of the case, then restores the real
-        values. A refused report stays masked, and an unverified caller gets no report at all."""
+        """Tool 8. The last gate: checks FinGuard's own record of the case. From v1.8.0 an approved
+        report stays masked and only an analyst can get the real values; before that they came back
+        here. A refused report stays masked, and an unverified caller gets no report at all."""
         cfg = self.policy.finalize_check
         decisions: list[GuardrailDecision] = []
         report, missing, unknown, restored, verified, caught = None, [], [], 0, None, 0
@@ -562,7 +581,12 @@ class Orchestrator:
                     reason, restored = "required_steps_missing", 0
                     report = self.pii_detector.mask(report_text, self.vault.tokenizer(case_id)).masked_text
                 else:
-                    reason, report = "all_required_steps_done", final_text
+                    reason = "all_required_steps_done"
+                    if cfg.return_real_values:
+                        report = final_text
+                    else:  # the masked report only: real values now go to an analyst, never to an agent
+                        report, restored = report_text, 0
+                        self.cases.report_approved(case_id, _report_hash(report_text))
         approved = reason == "all_required_steps_done"
         decisions.append(GuardrailDecision(
             layer="compliance.finalize",
@@ -582,7 +606,57 @@ class Orchestrator:
             "unknown_tokens": unknown,
             "tokens_restored": restored,
             "values_caught": caught,  # real values the writer left in the report: a sign something slipped through
+            "analyst_release_needed": approved and not cfg.return_real_values,
             "report_text": report,
+            "policy_version": self.version,
+        }
+
+    def require_analyst_key_is_set(self) -> None:
+        """Called when the REST door starts: without a key no report could ever be released."""
+        cfg = self.policy.analyst_release
+        if cfg.enabled and not any(self.analysts.has_key(a) for a in cfg.allowed_analysts):
+            raise RuntimeError(f"Policy {self.version} needs a key for one of: {', '.join(cfg.allowed_analysts)} (ANALYST_KEY_<NAME>)")
+
+    def handle_release(self, case_id: str, report_text: str, analyst_key: Optional[str]) -> dict[str, Any]:
+        """REST only, and never an MCP tool: no agent can even ask for real values. Only the exact
+        report Tool 8 approved can be released, and the case is checked again first, because it may
+        have changed since. Raises AccessDenied for a bad key; the audit log records who asked."""
+        if not self.policy.analyst_release.enabled:
+            raise AccessDenied("release_is_off")
+        self.check_case_id(case_id)
+        analyst = self.analysts.owner(analyst_key)
+        if analyst is None:
+            refused = GuardrailDecision(
+                layer="compliance.release", decision=Decision.BLOCK,
+                reasoning_trace="invalid_analyst_key", policy_version=self.version,
+            )
+            self._audit("release", [refused], case_id, released=False)
+            raise AccessDenied("invalid_analyst_key")
+        missing = self.cases.missing(case_id, self.policy.finalize_check.required_steps)
+        if _report_hash(report_text) not in self.cases.approved_reports(case_id):
+            missing.append("report_not_approved")
+        final_text, restored, unknown = self.vault.restore(case_id, report_text)
+        if unknown:
+            missing.append("unknown_tokens")
+        released = not missing
+        if released:
+            self.cases.report_released(case_id, analyst)
+        decision = GuardrailDecision(
+            layer="compliance.release",
+            decision=Decision.PASS if released else Decision.BLOCK,
+            # Counts and step names only: the report and its values never reach the audit trail.
+            reasoning_trace=f"analyst={analyst} missing={','.join(missing) or 'none'} tokens_restored={restored if released else 0}",
+            policy_version=self.version,
+        )
+        # Audited before the answer exists: if this write fails, no real values are returned.
+        request_id = self._audit("release", [decision], case_id, analyst=analyst, released=released)
+        return {
+            "request_id": request_id,
+            "released": released,
+            "reason": "released" if released else "not_releasable",
+            "missing": missing,
+            "tokens_restored": restored if released else 0,
+            "report_text": final_text if released else None,
             "policy_version": self.version,
         }
 

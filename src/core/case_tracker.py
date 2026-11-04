@@ -8,7 +8,7 @@ restart forgets every case, so Tool 8 then refuses them. src/storage/postgres.py
 from __future__ import annotations
 
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterable, Optional
 
 
@@ -18,6 +18,7 @@ class CaseRecord:
     claims_grounded: bool = False
     sanctions_blocked: bool = False
     refused_calls: int = 0
+    approved_reports: set[str] = field(default_factory=set)  # fingerprints of what Tool 8 approved
 
 
 def steps_missing(record: CaseRecord, required_steps: Iterable[str]) -> list[str]:
@@ -60,6 +61,18 @@ class CaseTracker:
             return
         with self._lock:
             self._cases.setdefault(case_id, CaseRecord()).refused_calls += 1
+
+    def report_approved(self, case_id: str, report_hash: str) -> None:
+        with self._lock:
+            self._cases.setdefault(case_id, CaseRecord()).approved_reports.add(report_hash)
+
+    def report_released(self, case_id: str, analyst: str) -> None:
+        """Who received the real values is kept in the audit log."""
+
+    def approved_reports(self, case_id: str) -> set[str]:
+        with self._lock:
+            record = self._cases.get(case_id)
+            return set(record.approved_reports) if record else set()
 
     def missing(self, case_id: str, required_steps: Iterable[str]) -> list[str]:
         """Required steps this case has not met. A case FinGuard has never seen fails outright."""

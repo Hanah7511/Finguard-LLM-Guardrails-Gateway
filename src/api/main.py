@@ -12,9 +12,9 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import Any, Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Response
 
-from src.api.schemas import AssessRiskRequest, ChatRequest, SanctionsScreenRequest, ValidateRequest
+from src.api.schemas import AssessRiskRequest, ChatRequest, ReleaseRequest, SanctionsScreenRequest, ValidateRequest
 from src.core.orchestrator import AccessDenied, Orchestrator, get_orchestrator
 from src.llm.client import LLMUnavailableError
 
@@ -23,7 +23,9 @@ from src.llm.client import LLMUnavailableError
 async def lifespan(app: FastAPI):
     # Build the orchestrator once at startup (policy check, law store, sanctions lists),
     # so a bad policy file stops the server here instead of failing the first request.
-    get_orchestrator().require_app_key_is_set()
+    orch = get_orchestrator()
+    orch.require_app_key_is_set()
+    orch.require_analyst_key_is_set()
     yield
 
 
@@ -102,6 +104,26 @@ def assess_risk(req: AssessRiskRequest, orch: Orchestrator = Depends(get_orchest
         )
     except ValueError as exc:  # e.g. parties without a case_id
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/cases/{case_id}/release", dependencies=APP_KEY)
+def release(
+    case_id: str,
+    req: ReleaseRequest,
+    response: Response,
+    x_analyst_key: Optional[str] = Header(default=None),
+    orch: Orchestrator = Depends(get_orchestrator),
+) -> dict[str, Any]:
+    """Real values, for a named analyst only. Deliberately not an MCP tool, so no agent can ask."""
+    response.headers["Cache-Control"] = "no-store"  # real values must not sit in a cache
+    require_case_id(orch, case_id)
+    try:
+        answer = orch.handle_release(case_id, req.report_text, x_analyst_key)
+    except AccessDenied as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    if not answer["released"]:
+        raise HTTPException(status_code=409, detail={"reason": answer["reason"], "missing": answer["missing"]})
+    return answer
 
 
 @app.post("/sanctions-screen", dependencies=APP_KEY)
