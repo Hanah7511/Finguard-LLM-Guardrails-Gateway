@@ -54,6 +54,7 @@ services:
       STORAGE_BACKEND: postgres
       DATABASE_URL: postgresql+psycopg://finguard_app:${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in .env}@db:5432/finguard
       VAULT_MASTER_KEY: ${VAULT_MASTER_KEY:?Set VAULT_MASTER_KEY in .env}
+      FINGUARD_API_KEY: ${FINGUARD_API_KEY:?Set FINGUARD_API_KEY in .env}
     ports:
       - "127.0.0.1:8000:8000"
     healthcheck:
@@ -72,6 +73,7 @@ services:
       STORAGE_BACKEND: postgres
       DATABASE_URL: postgresql+psycopg://finguard_app:${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in .env}@db:5432/finguard
       VAULT_MASTER_KEY: ${VAULT_MASTER_KEY:?Set VAULT_MASTER_KEY in .env}
+      FINGUARD_API_KEY: ""
       MCP_TRANSPORT: streamable-http
       MCP_HOST: 0.0.0.0
       MCP_PORT: "8001"

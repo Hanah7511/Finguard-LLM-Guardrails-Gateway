@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from pydantic import SecretStr
 from fastapi.testclient import TestClient
 
 from src.api.main import app
@@ -19,18 +20,19 @@ from src.core.orchestrator import Orchestrator, get_orchestrator
 from src.core.sanctions_screener import SanctionsScreener
 from src.monitoring.decision_logger import DecisionLogger
 
+API_KEY = "test-app-key-not-a-real-secret"  # made up
 ALERTS = json.loads((PROJECT_ROOT / "data" / "sample_alerts" / "alerts.json").read_text(encoding="utf-8"))
 
 
 @pytest.fixture(scope="module")
 def client():
-    settings = get_settings().model_copy(update={"openai_api_key": None})
+    settings = get_settings().model_copy(update={"openai_api_key": None, "finguard_api_key": SecretStr(API_KEY)})
     policy = get_policy()
     test_list = SanctionsScreener.from_policy(settings.sanctions_test_list_path, policy.sanctions_screening, "test")
     orch = Orchestrator(policy, settings, sanctions=test_list, audit=DecisionLogger(None))
     app.dependency_overrides[get_orchestrator] = lambda: orch
     # Not used as a context manager, so the startup step (real orchestrator) is skipped.
-    yield TestClient(app)
+    yield TestClient(app, headers={"X-API-Key": API_KEY})
     app.dependency_overrides.clear()
 
 
@@ -88,7 +90,7 @@ def test_assess_risk_accepts_a_whole_alert(client):
 
 def test_large_wire_is_not_a_ctr(client):
     a = next(x for x in ALERTS["alerts"] if x["alert_id"] == "ALT-2026-006")  # wire, 250,000
-    body = client.post("/assess-risk", json={"query": a["query"], "signals": a["signals"], "transaction_type": "wire"}).json()
+    body = client.post("/assess-risk", json={"query": a["query"], "signals": a["signals"], "transaction_type": "wire", "case_id": "CASE-T-1"}).json()
     assert body["ctr"]["required"] is False
 
 
@@ -99,6 +101,7 @@ def test_assess_risk_rejects_score_out_of_range(client):
 
 def test_sanctions_false_alarm_cleared_by_verified_dob(client):
     body = client.post("/sanctions-screen", json={
+        "case_id": "CASE-T-1",
         "entity_name": "Viktor Sampleov", "dob": "1990-01-01", "identifiers_verified": True,
     }).json()
     assert body["recommendation"] == "clear"
@@ -107,7 +110,7 @@ def test_sanctions_false_alarm_cleared_by_verified_dob(client):
 
 def test_unverified_dob_cannot_clear_exact_name(client):
     # Same listed name, different DOB, but nobody checked the DOB: it could be fake.
-    body = client.post("/sanctions-screen", json={"entity_name": "Viktor Sampleov", "dob": "1990-01-01"}).json()
+    body = client.post("/sanctions-screen", json={"entity_name": "Viktor Sampleov", "dob": "1990-01-01", "case_id": "CASE-T-1"}).json()
     assert body["recommendation"] == "escalate_for_review"
     assert "not verified" in body["matches"][0]["reason"]
 
@@ -118,5 +121,5 @@ def test_email_is_masked(client):
 
 
 def test_sanctions_true_match_blocked(client):
-    body = client.post("/sanctions-screen", json={"entity_name": "Khalid Testani", "dob": "1975-05-05"}).json()
+    body = client.post("/sanctions-screen", json={"entity_name": "Khalid Testani", "dob": "1975-05-05", "case_id": "CASE-T-1"}).json()
     assert body["recommendation"] == "block_and_escalate"

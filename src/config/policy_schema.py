@@ -178,6 +178,23 @@ class FinalizeCheckPolicy(StrictModel):
     )
 
 
+class AccessControlPolicy(StrictModel):
+    # Who may call FinGuard, and what a case id may look like. All off before v1.7.0.
+    require_app_key: bool = False  # the REST door needs X-API-Key on everything except /health
+    require_agent_key_on_case_tools: bool = False  # Tools 1, 3, 4, 5 need an agent key, as Tools 2 and 8 do
+    require_case_id: bool = False  # tools that change a case refuse a call without one
+    case_id_pattern: str = "^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$"
+
+    @field_validator("case_id_pattern")
+    @classmethod
+    def _pattern_compiles(cls, value: str) -> str:
+        try:
+            re.compile(value)
+        except re.error as exc:
+            raise ValueError(f"invalid case_id_pattern: {exc}") from exc
+        return value
+
+
 class GuardrailPolicy(StrictModel):
     policy_metadata: PolicyMetadata
     input_guardrails: InputGuardrailsPolicy
@@ -186,6 +203,7 @@ class GuardrailPolicy(StrictModel):
     risk_assessment: RiskAssessmentPolicy
     sanctions_screening: SanctionsScreeningPolicy
     finalize_check: FinalizeCheckPolicy = Field(default_factory=FinalizeCheckPolicy)
+    access_control: AccessControlPolicy = Field(default_factory=AccessControlPolicy)
 
     @model_validator(mode="after")
     def _finalize_needs_keys_and_tokens(self) -> "GuardrailPolicy":
@@ -197,6 +215,12 @@ class GuardrailPolicy(StrictModel):
             unknown = set(cfg.allowed_agents) - set(tools.allowlist)
             if unknown or not cfg.allowed_agents or not cfg.required_steps:
                 raise ValueError(f"finalize_check needs known allowed_agents and required_steps; unknown: {sorted(unknown)}")
+        return self
+
+    @model_validator(mode="after")
+    def _case_tools_need_agent_keys(self) -> "GuardrailPolicy":
+        if self.access_control.require_agent_key_on_case_tools and not self.tool_call_guardrails.require_agent_keys:
+            raise ValueError("require_agent_key_on_case_tools needs require_agent_keys")
         return self
 
     @model_validator(mode="after")

@@ -7,6 +7,8 @@ handle_* method runs only the checks that request needs, writes one audit record
 """
 from __future__ import annotations
 
+import hmac
+import re
 import logging
 import uuid
 from collections import Counter
@@ -35,6 +37,7 @@ from src.output_guardrails.grounding.base import Grounder, GroundingVerdict
 from src.output_guardrails.grounding.cosine_grounding import CosineGrounder
 from src.output_guardrails.grounding.nli_grounding import NLIGrounder
 from src.output_guardrails.pipeline import OutputGuardrailPipeline
+from src.tool_call_guardrails.agent_identity import MIN_KEY_CHARS
 from src.tool_call_guardrails.agent_identity import AgentIdentity
 from src.tool_call_guardrails.pipeline import ToolCallGuardrailPipeline
 from src.vector_store.retriever import Embedder, RegulationRetriever, SentenceTransformerEmbedder
@@ -66,6 +69,10 @@ def _hide_owner_names(owner: dict[str, Any], from_tokens: dict[str, str]) -> dic
         **owner, "name": from_tokens.get(owner["name"], "[HIDDEN]"), "listed_name": None,
         "owners": [_hide_owner_names(o, from_tokens) for o in owner["owners"]],
     }
+
+
+class AccessDenied(Exception):
+    """A call refused at the door. It says why, and never contains a key."""
 
 
 def new_request_id() -> str:
@@ -113,6 +120,9 @@ class Orchestrator:
         )
         self.sanctions = sanctions or self._load_sanctions(settings, s)
         self.ownership = OwnershipChecker(self.sanctions, s.ownership_rule)
+
+        api_key = settings.finguard_api_key.get_secret_value() if settings.finguard_api_key else ""
+        self._app_key = api_key if len(api_key) >= MIN_KEY_CHARS else None  # too short counts as no key
 
         self.cost_tracker = CostTracker()
         self.audit = audit or stored_audit or DecisionLogger(settings.audit_log_path, build_log_scrubber())
@@ -186,6 +196,41 @@ class Orchestrator:
 
 
     # ── FastAPI door ────────────────────────────────────────────────
+
+    def require_app_key_is_set(self) -> None:
+        """Called when the REST door starts: without a key it could only refuse everyone."""
+        if self.policy.access_control.require_app_key and not self._app_key:
+            raise RuntimeError(f"Policy {self.version} needs FINGUARD_API_KEY, of at least {MIN_KEY_CHARS} characters")
+
+    def check_app_key(self, sent: Optional[str]) -> None:
+        """REST door. Raises AccessDenied. Constant-time compare, and the key is never logged."""
+        if not self.policy.access_control.require_app_key:
+            return
+        if not (self._app_key and sent and hmac.compare_digest(sent.encode(), self._app_key.encode())):
+            logger.warning("REST call refused: missing or wrong X-API-Key")
+            raise AccessDenied("invalid_or_missing_api_key")
+
+    def check_case_id(self, case_id: Optional[str], required: bool = True) -> None:
+        """Raises AccessDenied. The value itself is not logged: it may not be a case id at all."""
+        cfg = self.policy.access_control
+        if not cfg.require_case_id:
+            return
+        if not case_id:
+            if required:
+                raise AccessDenied("case_id_required")
+        elif not re.fullmatch(cfg.case_id_pattern, case_id):
+            raise AccessDenied("case_id_bad_format")
+
+    def check_agent(self, tool: str, case_id: Optional[str], agent_name: Optional[str], agent_key: Optional[str]) -> None:
+        """MCP door, Tools 1, 3, 4 and 5. Raises AccessDenied. A refusal here is NOT added to the
+        case record: otherwise anyone sending a wrong key could spoil someone else's case for good."""
+        self.check_case_id(case_id)
+        if not self.policy.access_control.require_agent_key_on_case_tools:
+            return
+        who = self.tools.identity.check(agent_name or "", agent_key)
+        if who.stops_pipeline:
+            self._audit("access_denied", [who], case_id, tool=tool, agent=agent_name)
+            raise AccessDenied(who.reasoning_trace)
 
     def handle_chat(
         self, query: str, consent: Optional[bool], customer_id: Optional[str] = None, case_id: Optional[str] = None

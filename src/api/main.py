@@ -10,12 +10,12 @@ Docs:  http://localhost:8000/docs
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Optional
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 
 from src.api.schemas import AssessRiskRequest, ChatRequest, SanctionsScreenRequest, ValidateRequest
-from src.core.orchestrator import Orchestrator, get_orchestrator
+from src.core.orchestrator import AccessDenied, Orchestrator, get_orchestrator
 from src.llm.client import LLMUnavailableError
 
 
@@ -23,7 +23,7 @@ from src.llm.client import LLMUnavailableError
 async def lifespan(app: FastAPI):
     # Build the orchestrator once at startup (policy check, law store, sanctions lists),
     # so a bad policy file stops the server here instead of failing the first request.
-    get_orchestrator()
+    get_orchestrator().require_app_key_is_set()
     yield
 
 
@@ -38,6 +38,26 @@ app = FastAPI(
 # FastAPI runs plain functions in a thread pool so one slow request does not block others.
 
 
+def require_app_key(
+    x_api_key: Optional[str] = Header(default=None), orch: Orchestrator = Depends(get_orchestrator)
+) -> None:
+    try:
+        orch.check_app_key(x_api_key)
+    except AccessDenied as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+
+def require_case_id(orch: Orchestrator, case_id: Optional[str], required: bool = True) -> None:
+    try:
+        orch.check_case_id(case_id, required)
+    except AccessDenied as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+# /health stays open, so a load balancer or Docker can check the server without a key.
+APP_KEY = [Depends(require_app_key)]
+
+
 @app.get("/health")
 def health(orch: Orchestrator = Depends(get_orchestrator)) -> dict[str, Any]:
     """Is the server up, which policy is active, and is screening real or test."""
@@ -49,29 +69,32 @@ def health(orch: Orchestrator = Depends(get_orchestrator)) -> dict[str, Any]:
     }
 
 
-@app.get("/policy")
+@app.get("/policy", dependencies=APP_KEY)
 def policy(orch: Orchestrator = Depends(get_orchestrator)) -> dict[str, Any]:
     return orch.handle_get_policy_info()
 
 
-@app.post("/validate")
+@app.post("/validate", dependencies=APP_KEY)
 def validate(req: ValidateRequest, orch: Orchestrator = Depends(get_orchestrator)) -> dict[str, Any]:
     """Input guards only, no LLM call. For apps that call their own LLM."""
+    require_case_id(orch, req.case_id, required=False)
     return orch.handle_validate(req.text, req.consent, req.enforce_consent, req.case_id)
 
 
-@app.post("/chat")
+@app.post("/chat", dependencies=APP_KEY)
 def chat(req: ChatRequest, orch: Orchestrator = Depends(get_orchestrator)) -> dict[str, Any]:
     """Full pipeline: input guards -> law lookup -> LLM -> output guards."""
+    require_case_id(orch, req.case_id, required=False)
     try:
         return orch.handle_chat(req.query, req.consent, req.customer_id, req.case_id)
     except LLMUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
-@app.post("/assess-risk")
+@app.post("/assess-risk", dependencies=APP_KEY)
 def assess_risk(req: AssessRiskRequest, orch: Orchestrator = Depends(get_orchestrator)) -> dict[str, Any]:
     """Tool 1 over HTTP. An upstream engine posts its alert here."""
+    require_case_id(orch, req.case_id)
     parties = [p.model_dump() for p in req.parties] if req.parties else None
     try:
         return orch.handle_assess_risk(
@@ -81,9 +104,10 @@ def assess_risk(req: AssessRiskRequest, orch: Orchestrator = Depends(get_orchest
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-@app.post("/sanctions-screen")
+@app.post("/sanctions-screen", dependencies=APP_KEY)
 def sanctions_screen(req: SanctionsScreenRequest, orch: Orchestrator = Depends(get_orchestrator)) -> dict[str, Any]:
     """Tool 4 over HTTP. Screen one person or company, and a company's owners if given."""
+    require_case_id(orch, req.case_id)
     owners = [o.model_dump() for o in req.owners] if req.owners else None
     try:
         return orch.handle_sanctions_screen(

@@ -29,6 +29,7 @@ TOOLS = {
 }
 # Made-up test keys, not real secrets. FinGuard is given the same ones.
 KEYS = {"investigation_agent": "test-key-investigation-0001", "summarization_agent": "test-key-summarization-0003"}
+NEED_A_KEY = {"finguard_assess_risk", "finguard_pii_and_compliance_check", "finguard_sanctions_screen", "finguard_validate_grounding"}
 
 
 class FakeGrounder(Grounder):
@@ -50,10 +51,15 @@ def server():
 
 
 def call(server, tool: str, args: dict | None = None):
-    """Connect a client, call one tool, return the result."""
+    """Connect a client, call one tool, return the result. Sends a key and case id where they are needed."""
+    args = dict(args or {})
+    if tool in NEED_A_KEY:
+        args = {"agent_name": "investigation_agent", "agent_key": KEYS["investigation_agent"], "case_id": "CASE-T-1", **args}
+    if tool == "finguard_validate_tool_call":
+        args = {"case_id": "CASE-T-1", **args}
     async def run():
         async with Client(server) as client:
-            return await client.call_tool(tool, args or {})
+            return await client.call_tool(tool, args)
     return anyio.run(run)
 
 
@@ -110,7 +116,7 @@ def test_cash_alert_needs_a_ctr(server):
 
 def test_pii_is_masked(server):
     r = call(server, "finguard_pii_and_compliance_check", {"text": "Customer IBAN is GB82 WEST 1234 5698 7654 32"})
-    assert r.structured_content["masked_text"].endswith("is [IBAN_CODE]")  # the model also wrongly masks "Customer IBAN" as a name
+    assert r.structured_content["masked_text"].endswith("is [IBAN_CODE_1]")  # the model also wrongly masks "Customer IBAN" as a name
 
 
 def test_sanctions_true_match_blocked(server):

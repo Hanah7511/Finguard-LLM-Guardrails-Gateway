@@ -103,7 +103,7 @@ NLI grounding against official law texts (US BSA regulations; FATF Recommendatio
 
 ## MCP Tools (8)
 
-*Tools 1–8 are live in `src/mcp_server/server.py`.* All tools take a `case_id` to link calls into one audit trail per case. Each tool's description is written for the agent: when to call it and what to do with the answer. From policy v1.4.0, Tool 2 requires the agent's secret key (`agent_key`) and works out the caller from it, so a self-reported name is not enough. In finintel the tool wrapper will add the key in code, so the LLM never sees it. That also keeps Tool 8's real values away from the LLM: without a key it cannot ask for them, and the wrapper sends the approved report to human review instead of back to the model.
+*Tools 1–8 are live in `src/mcp_server/server.py`.* From policy v1.7.0, tools that change a case need a `case_id` in the set format, plus `agent_name` and `agent_key`. A call refused for a bad key is audited, but not added to the case record. Each tool's description is written for the agent: when to call it and what to do with the answer. From policy v1.4.0, Tool 2 requires the agent's secret key (`agent_key`) and works out the caller from it, so a self-reported name is not enough. In finintel the tool wrapper will add the key in code, so the LLM never sees it. That also keeps Tool 8's real values away from the LLM: without a key it cannot ask for them, and the wrapper sends the approved report to human review instead of back to the model.
 
 | # | Tool | Description |
 |---|------|-------------|
@@ -200,7 +200,8 @@ finguard-llm-guardrails-gateway/
 │   │       ├── v1.3.0_guardrail_policy.yaml
 │   │       ├── v1.4.0_guardrail_policy.yaml
 │   │       ├── v1.5.0_guardrail_policy.yaml
-│   │       ├── v1.6.0_guardrail_policy.yaml   # active
+│   │       ├── v1.6.0_guardrail_policy.yaml
+│   │       ├── v1.7.0_guardrail_policy.yaml   # active
 │   │       └── CHANGELOG.md
 │   ├── core/
 │   │   ├── orchestrator.py          # THE BRAIN — one handle_* per job
@@ -338,6 +339,7 @@ OPENAI_API_KEY=sk-...
 POSTGRES_PASSWORD=...
 APP_DB_PASSWORD=...
 VAULT_MASTER_KEY=...   # 32 random bytes, base64. Losing it makes every stored real value unreadable.
+FINGUARD_API_KEY=...   # the key apps send to the REST door as X-API-Key
 
 # Agent secret keys, one per agent. Make each with: python -c "import secrets; print(secrets.token_urlsafe(32))"
 AGENT_KEY_INVESTIGATION=inv-secret-...
@@ -345,7 +347,7 @@ AGENT_KEY_COMPLIANCE=cmp-secret-...
 AGENT_KEY_SUMMARIZATION=sum-secret-...
 
 # Active policy version
-ACTIVE_POLICY_VERSION=1.6.0
+ACTIVE_POLICY_VERSION=1.7.0
 ```
 
 ### 3. Run FastAPI (standalone)
@@ -355,6 +357,7 @@ uvicorn src.api.main:app --reload --port 8000
 
 # Test
 curl http://localhost:8000/health
+curl -H "X-API-Key: <your key>" http://localhost:8000/policy
 curl http://localhost:8000/metrics   # planned
 ```
 
@@ -394,7 +397,7 @@ docker compose down                # stops them; models and audit logs stay in D
 |------|-------------------|
 | Secrets | Passed from `.env` when a container starts; `.dockerignore` keeps them out of the image |
 | Real sanctions list, licensed law texts | Read-only folders mounted at run time, never stored in the image |
-| Access | Ports open on `127.0.0.1` only, because the doors have no login yet |
+| Access | Ports open on `127.0.0.1` only. The REST door needs an app key, and tools that change a case need an agent key |
 | Database | No outside port. The doors log in as a limited user that can only read and add rows |
 | Audit log and case history | The database refuses edits and deletes |
 | User | Runs as a non-root user |
@@ -402,11 +405,13 @@ docker compose down                # stops them; models and audit logs stay in D
 
 **Limits for now:**
 
-- There is no login on either door yet, so do not open these ports to a network.
+- Logins are simple secret keys: no user accounts, no expiry and no rate limit. Add TLS and a proxy before opening these ports to a network.
+- `/docs` stays open. It shows the shape of requests, but no data.
+- An agent with a valid key can call a tool on any case.
 - Tool 8 still returns real values to its caller. A separate analyst endpoint replaces this next.
 - The master key sits in `.env`: anyone with both that file and the database can read the values. A real deployment needs a secrets manager or key service.
 - A Docker volume is not a backup.
-- Known issue: `docker compose down` once failed with a "zombie" error while stopping the doors (1 of 4 shutdowns, cause unknown). Data was not affected. Running it again finished the job.
+- Known issue: `docker compose down` once failed with a "zombie" error while stopping the doors (1 of 5 shutdowns, cause unknown). Data was not affected. Running it again finished the job.
 
 ---
 
@@ -434,7 +439,7 @@ docker compose down                # stops them; models and audit logs stay in D
 | Sanctions match recall | `sanctions_screen()` | Name variation testing: Mohammed / Muhammad / Mohamed |
 | Task success rate | Full MCP flow | Scripted fake-agent now; real finintel later |
 | Policy version coverage | All decisions | Must be 100% — automatic test, not a score |
-| Policy v1.0.0 → v1.6.0 | Full eval suite | Run on every version; compare results |
+| Policy v1.0.0 → v1.7.0 | Full eval suite | Run on every version; compare results |
 | End-to-end agent run | `scripts/fake_agent.py` (12 alerts, `--rogue`) | Task success: every investigation reaches the expected outcome; rogue calls refused |
 | Sample alert regression | `data/sample_alerts/alerts.json` | `python scripts/run_sample_alerts.py` — must stay 12/12 unless a policy change explains the difference |
 
@@ -471,7 +476,7 @@ docker compose down                # stops them; models and audit logs stay in D
 **In active development.** Part of the Financial Risk Intelligence Platform portfolio.
 
 - [x] Architecture + design (dual-door, 6 guardrail layers, 8 MCP tools)
-- [x] Versioned YAML policy engine (v1.0.0 – v1.5.0, v1.6.0 active)
+- [x] Versioned YAML policy engine (v1.0.0 – v1.6.0, v1.7.0 active)
 - [x] Guardrail modules for all 6 layers (input, tool-call, output, safety, privacy, compliance)
 - [x] Security model designed (5 properties) — implementation in progress
 - [x] `orchestrator.py` — single brain for both doors (one `handle_*` per job; risk score = higher of FinGuard and upstream engine score)
@@ -489,7 +494,8 @@ docker compose down                # stops them; models and audit logs stay in D
 - [ ] Tests + evals
 - [x] PostgreSQL: encrypted vault, case history and append-only audit log, shared by both doors and surviving a restart
 - [x] Name masking (policy v1.6.0): party list, Presidio, Tool 4 tokens, Tool 8 report re-check
-- [ ] Analyst release endpoint, logins, required `case_id` (Step 7C)
+- [x] Access control (policy v1.7.0): REST app key, agent keys on every tool that changes a case, required `case_id` in a set format
+- [ ] Analyst release endpoint, so the AI side never receives real values (Step 7C)
 - [ ] Measure name detection across names of different origins (Step 8)
 - [ ] `/metrics` endpoint
 

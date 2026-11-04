@@ -23,10 +23,19 @@ CLAIM = {
 }
 
 
+def secret(name: str) -> str:
+    """Sent, never printed."""
+    return os.environ.get(name) or dotenv_values(".env").get(name)
+
+
+def signed(agent: str, key_name: str) -> dict:
+    return {"agent_name": agent, "agent_key": secret(key_name)}
+
+
 def rest_assess_risk(case_id: str) -> None:
     body = json.dumps({"query": "Review this alert", "signals": {"structuring_flag": 1}, "case_id": case_id}).encode()
     request = urllib.request.Request(
-        "http://127.0.0.1:8000/assess-risk", data=body, headers={"Content-Type": "application/json"}
+        "http://127.0.0.1:8000/assess-risk", data=body, headers={"Content-Type": "application/json", "X-API-Key": secret("FINGUARD_API_KEY")}
     )
     with urllib.request.urlopen(request, timeout=30) as response:
         print("REST door, risk assessed:", json.load(response)["risk_level"])
@@ -36,24 +45,20 @@ async def start() -> None:
     case_id = f"DEMO-{int(time.time())}"
     rest_assess_risk(case_id)
     async with Client(MCP_URL) as client:
-        masked = await client.call_tool("finguard_pii_and_compliance_check", {"text": RAW, "case_id": case_id})
+        masked = await client.call_tool("finguard_pii_and_compliance_check", {"text": RAW, "case_id": case_id, **signed("investigation_agent", "AGENT_KEY_INVESTIGATION")})
         print("MCP door, masked text:  ", masked.structured_content["masked_text"])
         print("MCP door, checking the claim (the first time downloads the model, so this can take minutes)...")
-        grounding = await client.call_tool("finguard_validate_grounding", {"claims": [CLAIM], "case_id": case_id})
+        grounding = await client.call_tool("finguard_validate_grounding", {"claims": [CLAIM], "case_id": case_id, **signed("summarization_agent", "AGENT_KEY_SUMMARIZATION")})
         print("MCP door, safe to finalize:", grounding.structured_content["safe_to_finalize"])
     print("\nCase id:", case_id)
 
 
 async def finish(case_id: str) -> None:
-    # The key is sent, never printed.
-    name = "AGENT_KEY_SUMMARIZATION"
-    key = os.environ.get(name) or dotenv_values(".env").get(name)
     async with Client(MCP_URL) as client:
         result = await client.call_tool("finguard_finalize_check", {
-            "agent_name": "summarization_agent",
             "report_text": "Deposit from IBAN [IBAN_CODE_1].",
             "case_id": case_id,
-            "agent_key": key,
+            **signed("summarization_agent", "AGENT_KEY_SUMMARIZATION"),
         })
     r = result.structured_content
     print("approved:       ", r["approved"])

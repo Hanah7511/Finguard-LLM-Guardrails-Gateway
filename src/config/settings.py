@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 30.0
 
     # Policy
-    active_policy_version: str = "1.6.0"
+    active_policy_version: str = "1.7.0"
     policy_dir: Path = PROJECT_ROOT / "src" / "config" / "policies"
 
     # Data
@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     spacy_model: str = "en_core_web_sm"
     pii_backend: Literal["auto", "presidio", "regex"] = "auto"
     retrieval_top_k: int = 3
+
+    # The key apps must send to the REST door as X-API-Key.
+    finguard_api_key: Optional[SecretStr] = None
 
     # Servers
     api_host: str = "0.0.0.0"

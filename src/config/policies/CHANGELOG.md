@@ -3,6 +3,15 @@
 Every policy change gets a new versioned file, an entry here and a git commit.
 Old versions stay in place: reports record the version they were validated under.
 
+## 1.7.0 — 2026-11-04
+Approved by: compliance-team
+
+- Added `access_control`.
+- `require_app_key`: the REST door needs `X-API-Key` on everything except `/health`, and refuses to start without `FINGUARD_API_KEY`.
+- `require_agent_key_on_case_tools`: Tools 1, 3, 4 and 5 need `agent_name` and `agent_key`, as Tools 2 and 8 already did.
+- `require_case_id` and `case_id_pattern`: tools that change a case refuse a call with no case id or one in the wrong format.
+- A refused call is audited but not added to the case record, so a wrong key cannot spoil someone else's case.
+
 ## 1.6.0 — 2026-11-03
 Approved by: compliance-team
 

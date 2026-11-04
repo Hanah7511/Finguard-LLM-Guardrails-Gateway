@@ -61,6 +61,11 @@ POISONED_ALERT = "ALT-2026-007"
 # One secret key per agent, made fresh for every run. FinGuard is given the same keys.
 KEYS = {agent: secrets.token_urlsafe(32) for agent in ("investigation_agent", "compliance_agent", "summarization_agent")}
 
+def signed(agent: str) -> dict[str, str]:
+    """Who is calling. In finintel the tool wrapper adds this in code, so the LLM never sees the key."""
+    return {"agent_name": agent, "agent_key": KEYS[agent]}
+
+
 Call = Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]
 
 
@@ -92,7 +97,8 @@ async def investigate(alert: dict[str, Any], call: Call, rogue: bool = False) ->
         "query": alert["query"], "signals": alert["signals"],
         "external_risk_score": alert.get("external_risk_score"),
         "transaction_type": alert.get("transaction_type"),
-        "parties": [{"name": alert["party"]["name"]}] if alert.get("party") else None, **case,
+        "parties": [{"name": alert["party"]["name"]}] if alert.get("party") else None,
+        **signed("investigation_agent"), **case,
     })
     inv.ctr_required = bool(risk.get("ctr", {}).get("required"))
     ctr = "CTR required" if inv.ctr_required else "no CTR"
@@ -110,7 +116,7 @@ async def investigate(alert: dict[str, Any], call: Call, rogue: bool = False) ->
     inv.log("investigation", f"validate_tool_call transaction_lookup -> approved={permit['approved']}")
     notes = []
     if permit["approved"]:
-        checked = await call("finguard_pii_and_compliance_check", {"text": transaction_lookup(txn), **case})
+        checked = await call("finguard_pii_and_compliance_check", {"text": transaction_lookup(txn), **signed("investigation_agent"), **case})
         inv.log("investigation", f"pii_check -> masked {checked['pii_found']}")
         if checked["safe_to_use"]:
             notes.append(checked["masked_text"])
@@ -150,7 +156,8 @@ async def investigate(alert: dict[str, Any], call: Call, rogue: bool = False) ->
             "country": alert["signals"].get("country"),
             "dob": party.get("dob"), "nationality": party.get("nationality"),
             "id_number": party.get("id_number"),
-            "identifiers_verified": party.get("identifiers_verified", False), **case,
+            "identifiers_verified": party.get("identifiers_verified", False),
+            **signed("compliance_agent"), **case,
         })
         inv.log("compliance", f"sanctions_screen -> {screen['recommendation']}")
         if screen["recommendation"] == "block_and_escalate":
@@ -177,7 +184,7 @@ async def investigate(alert: dict[str, Any], call: Call, rogue: bool = False) ->
         claims.append(CTR_CLAIM)
     if rogue:
         claims.append(FALSE_CLAIM)
-    grounding = await call("finguard_validate_grounding", {"claims": claims, **case})
+    grounding = await call("finguard_validate_grounding", {"claims": claims, **signed("summarization_agent"), **case})
     inv.log("summarization", f"validate_grounding -> {grounding['verdict']} ({len(claims)} claims, {len(notes)} notes)")
 
     # 7. The last gate. FinGuard decides from its own record of the case, even if a rogue agent asks anyway.
