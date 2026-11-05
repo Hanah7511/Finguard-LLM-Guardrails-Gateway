@@ -1,0 +1,267 @@
+{
+  "_note": "Claims checked against the public US law store only, so the score is the same on every machine. True claims paraphrase the cited section and should be accepted. False claims must not be accepted. Tune on dev only.",
+  "true": {
+    "dev": [
+      {
+        "citation": "31 CFR 1010.311",
+        "claim": "Financial institutions must report currency transactions of more than $10,000."
+      },
+      {
+        "citation": "31 CFR 1020.320(b)",
+        "claim": "A bank must file a SAR within 30 calendar days of first detecting the facts."
+      },
+      {
+        "citation": "31 CFR 1020.320(d)",
+        "claim": "A bank must keep a copy of each SAR for five years from the date of filing."
+      },
+      {
+        "citation": "31 CFR 1010.313(b)",
+        "claim": "Multiple currency transactions in one business day are treated as one transaction if the institution knows they are by or for any person and total more than $10,000."
+      },
+      {
+        "citation": "31 CFR 1020.320(a)",
+        "claim": "A suspicious transaction can require reporting if it involves at least $5,000."
+      },
+      {
+        "citation": "31 U.S.C. § 5324(d)",
+        "claim": "Violating this section can lead to imprisonment for up to 5 years."
+      },
+      {
+        "citation": "31 CFR 1010.100(xx)",
+        "claim": "Breaking a sum above $10,000 into smaller amounts to evade reporting is structuring."
+      },
+      {
+        "citation": "31 CFR 1010.230(a)",
+        "claim": "Covered financial institutions must have written procedures to identify and verify beneficial owners."
+      },
+      {
+        "citation": "31 CFR 1020.320(c)",
+        "claim": "A bank does not have to file a SAR for a robbery that is reported to law enforcement."
+      }
+    ],
+    "test": [
+      {
+        "citation": "31 CFR 1010.100(xx)",
+        "claim": "Structuring does not require exceeding $10,000 at one institution on one day."
+      },
+      {
+        "citation": "31 CFR 1010.313(b)",
+        "claim": "Deposits made over a weekend count as received on the next business day."
+      },
+      {
+        "citation": "31 CFR 1020.320(b)",
+        "claim": "If no suspect was identified, a bank may delay filing a SAR by another 30 calendar days."
+      },
+      {
+        "citation": "31 CFR 1020.320(b)",
+        "claim": "Reporting may never be delayed more than 60 calendar days after initial detection."
+      },
+      {
+        "citation": "31 U.S.C. § 5324(d)",
+        "claim": "Aggravated cases can carry up to 10 years in prison."
+      },
+      {
+        "citation": "31 CFR 1010.311",
+        "claim": "A cash deposit of more than $10,000 must be reported."
+      },
+      {
+        "citation": "31 CFR 1020.320(d)",
+        "claim": "Banks must make SAR supporting documents available to FinCEN on request."
+      },
+      {
+        "citation": "31 CFR 1010.313(a)",
+        "claim": "A financial institution includes all of its domestic branch offices for currency reporting."
+      },
+      {
+        "citation": "31 CFR 1010.230(a)",
+        "claim": "Beneficial ownership procedures must be included in the anti-money laundering compliance program."
+      }
+    ]
+  },
+  "false": {
+    "dev": [
+      {
+        "citation": "31 CFR 1010.311",
+        "claim": "Financial institutions must report currency transactions of more than $50,000.",
+        "kind": "wrong number"
+      },
+      {
+        "citation": "31 CFR 1020.320(b)",
+        "claim": "A bank must file a SAR within 90 calendar days of first detecting the facts.",
+        "kind": "wrong number"
+      },
+      {
+        "citation": "31 CFR 1020.320(d)",
+        "claim": "A bank must keep a copy of each SAR for ten years from the date of filing.",
+        "kind": "wrong number"
+      },
+      {
+        "citation": "31 CFR 1010.311",
+        "claim": "Financial institutions never need to report currency transactions.",
+        "kind": "opposite"
+      },
+      {
+        "citation": "31 CFR 1020.320(c)",
+        "claim": "A bank must always file a SAR for a robbery reported to law enforcement.",
+        "kind": "opposite"
+      },
+      {
+        "citation": "31 CFR 1010.100(xx)",
+        "claim": "Splitting cash into smaller deposits to avoid a report is not structuring.",
+        "kind": "opposite"
+      },
+      {
+        "citation": "31 CFR 1010.311",
+        "claim": "Banks must freeze the account of any customer who deposits cash.",
+        "kind": "not in the law"
+      },
+      {
+        "citation": "31 CFR 1020.320(d)",
+        "claim": "Banks must tell the customer whenever a SAR is filed.",
+        "kind": "not in the law"
+      },
+      {
+        "citation": "31 CFR 1010.230(a)",
+        "claim": "Beneficial owners must be interviewed in person every year.",
+        "kind": "not in the law"
+      },
+      {
+        "citation": "31 CFR 1010.311",
+        "claim": "A bank must file a SAR within 30 calendar days of first detecting the facts.",
+        "kind": "wrong citation"
+      },
+      {
+        "citation": "31 CFR 1020.320(c)",
+        "claim": "Financial institutions must report currency transactions of more than $10,000.",
+        "kind": "wrong citation"
+      },
+      {
+        "citation": "31 CFR 9999.999",
+        "claim": "Banks must report suspicious transactions.",
+        "kind": "made-up citation"
+      },
+      {
+        "citation": "31 U.S.C. § 9999",
+        "claim": "Structuring carries a prison sentence.",
+        "kind": "made-up citation"
+      },
+      {
+        "citation": "31 CFR 1020.320(b)",
+        "claim": "A bank must file a SAR within 30 business days of first detecting the facts.",
+        "kind": "almost right"
+      },
+      {
+        "citation": "31 CFR 1020.320(d)",
+        "claim": "A bank must keep a copy of each SAR for five years from the date of the transaction.",
+        "kind": "almost right"
+      },
+      {
+        "citation": "31 CFR 1010.311",
+        "claim": "Financial institutions must report currency transactions of $10,000 or more.",
+        "kind": "almost right"
+      },
+      {
+        "citation": "31 CFR 1010.313(b)",
+        "claim": "Multiple currency transactions are treated as one if they total more than $10,000 in any one week.",
+        "kind": "almost right"
+      },
+      {
+        "citation": "31 CFR 1020.320(a)",
+        "claim": "A suspicious transaction can require reporting if it involves more than $10,000.",
+        "kind": "almost right"
+      }
+    ],
+    "test": [
+      {
+        "citation": "31 CFR 1020.320(a)",
+        "claim": "A suspicious transaction only requires reporting if it involves at least $50,000.",
+        "kind": "wrong number"
+      },
+      {
+        "citation": "31 U.S.C. § 5324(d)",
+        "claim": "Violating this section can lead to imprisonment for up to 50 years.",
+        "kind": "wrong number"
+      },
+      {
+        "citation": "31 CFR 1020.320(b)",
+        "claim": "Reporting may be delayed for up to 180 calendar days after initial detection.",
+        "kind": "wrong number"
+      },
+      {
+        "citation": "31 CFR 1010.313(b)",
+        "claim": "Multiple currency transactions on one business day are never added together.",
+        "kind": "opposite"
+      },
+      {
+        "citation": "31 CFR 1020.320(d)",
+        "claim": "Banks do not have to keep any record of a filed SAR.",
+        "kind": "opposite"
+      },
+      {
+        "citation": "31 CFR 1010.230(a)",
+        "claim": "Financial institutions have no duty to verify beneficial owners.",
+        "kind": "opposite"
+      },
+      {
+        "citation": "31 CFR 1020.320(b)",
+        "claim": "A SAR must be approved by a court before it is filed.",
+        "kind": "not in the law"
+      },
+      {
+        "citation": "31 CFR 1010.311",
+        "claim": "Customers must pay a fee for each currency transaction report.",
+        "kind": "not in the law"
+      },
+      {
+        "citation": "31 CFR 1010.313(a)",
+        "claim": "Foreign branches must close their accounts at the end of each year.",
+        "kind": "not in the law"
+      },
+      {
+        "citation": "31 CFR 1010.313(a)",
+        "claim": "A bank must keep a copy of each SAR for five years from the date of filing.",
+        "kind": "wrong citation"
+      },
+      {
+        "citation": "31 CFR 1010.230(a)",
+        "claim": "Structuring can lead to imprisonment for up to 5 years.",
+        "kind": "wrong citation"
+      },
+      {
+        "citation": "31 CFR 8888.888",
+        "claim": "Banks must keep records of all wire transfers.",
+        "kind": "made-up citation"
+      },
+      {
+        "citation": "12 CFR 9999.1",
+        "claim": "Banks must file a report for each cash deposit.",
+        "kind": "made-up citation"
+      },
+      {
+        "citation": "31 CFR 1010.313(b)",
+        "claim": "Deposits made over a weekend count as received on the previous business day.",
+        "kind": "almost right"
+      },
+      {
+        "citation": "31 CFR 1020.320(b)",
+        "claim": "A bank may delay filing a SAR by another 30 calendar days even if a suspect was identified.",
+        "kind": "almost right"
+      },
+      {
+        "citation": "31 U.S.C. § 5324(d)",
+        "claim": "Aggravated cases involve a pattern of illegal activity of more than $10,000 in a 12-month period.",
+        "kind": "almost right"
+      },
+      {
+        "citation": "31 CFR 1020.320(d)",
+        "claim": "A bank must keep supporting documents for five years from the date of detection.",
+        "kind": "almost right"
+      },
+      {
+        "citation": "31 CFR 1010.100(xx)",
+        "claim": "A transaction must exceed $10,000 at a single institution on a single day to be structuring.",
+        "kind": "almost right"
+      }
+    ]
+  }
+}

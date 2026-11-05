@@ -22,6 +22,11 @@ from src.config.settings import get_settings  # noqa: E402
 from src.core.sanctions_screener import SanctionsScreener  # noqa: E402
 from src.input_guardrails.pii.presidio_detector import build_pii_detector  # noqa: E402
 from src.input_guardrails.pipeline import InjectionDetector, PatternSafetyClassifier  # noqa: E402
+from src.input_guardrails.pii.regex_detector import RegexPIIDetector  # noqa: E402
+from src.output_guardrails.grounding.base import GroundingVerdict  # noqa: E402
+from src.output_guardrails.grounding.nli_grounding import NLIGrounder  # noqa: E402
+from src.output_guardrails.pipeline import OutputGuardrailPipeline  # noqa: E402
+from src.vector_store.retriever import RegulationRetriever  # noqa: E402
 
 DATASETS = ROOT / "evals" / "datasets"
 CACHE = ROOT / "evals" / "cache"  # public data: downloaded once, never committed
@@ -117,6 +122,60 @@ def run_names_eval() -> dict:
     return {"groups": table, "normal_text": wrong}
 
 
+def run_grounding_eval() -> dict:
+    """Does the real NLI model accept true legal claims and refuse false ones? The public law store only."""
+    policy = get_policy()
+    settings = get_settings()
+    cfg = policy.output_guardrails
+    data = json.loads((DATASETS / "grounding.json").read_text(encoding="utf-8"))
+    pipeline = OutputGuardrailPipeline(
+        policy,
+        NLIGrounder(cfg.entailment_threshold, cfg.contradiction_threshold, model_name=settings.nli_model),
+        RegulationRetriever.from_json(settings.regulations_path, None),
+        RegexPIIDetector(["EMAIL_ADDRESS"], []),  # not used by this check
+    )
+
+    def judge(item: dict) -> tuple[bool, float | None]:
+        _, result, _ = pipeline.check_grounding_for_citation(item["citation"], item["claim"])
+        if result is None:
+            return False, None
+        return result.verdict is GroundingVerdict.GROUNDED, result.entailment_score
+
+    true_rows, false_rows, scores = {}, {}, {}
+    for split in ("dev", "test"):
+        judged_true = [judge(c) for c in data["true"][split]]
+        judged_false = [judge(c) for c in data["false"][split]]
+        accepted = sum(ok for ok, _ in judged_true)
+        true_rows[split] = {"accepted": f"{accepted} of {len(judged_true)}", "rate": percent(accepted / len(judged_true))}
+        refused = [not ok for ok, _ in judged_false]
+        false_rows[split] = score_by_kind(data["false"][split], refused)
+        true_scores = [s for _, s in judged_true if s is not None]
+        false_scores = [s for _, s in judged_false if s is not None]
+        scores[split] = {"lowest_true": round(min(true_scores), 2), "highest_false": round(max(false_scores), 2)}
+        if split == "dev":  # never for the test set
+            for item, (ok, score) in zip(data["true"][split], judged_true):
+                if not ok:
+                    print(f"  dev true claim refused (entailment {score:.2f}): {item['claim']}")
+            for item, (ok, score) in zip(data["false"][split], judged_false):
+                if ok:
+                    print(f"  dev FALSE claim accepted ({item['kind']}, entailment {score:.2f}): {item['claim']}")
+    return {"true_claims": true_rows, "false_claims": false_rows, "scores": scores}
+
+
+def print_grounding(grounding: dict) -> None:
+    print("\nGrounding: true claims accepted")
+    for split, row in grounding["true_claims"].items():
+        print(f"  {split:<30}{row['accepted']:<14}{row['rate']}")
+    print("\nGrounding: false claims refused")
+    print(f"  {'kind':<30}{'dev':<14}{'test':<14}test rate")
+    for kind in grounding["false_claims"]["test"]:
+        dev, test = grounding["false_claims"]["dev"][kind], grounding["false_claims"]["test"][kind]
+        print(f"  {kind:<30}{dev['caught']:<14}{test['caught']:<14}{test['rate']}")
+    print("\nGrounding: do the model's scores separate true from false? (lowest true should be above highest false)")
+    for split, row in grounding["scores"].items():
+        print(f"  {split:<30}lowest true {row['lowest_true']:<8}highest false {row['highest_false']}")
+
+
 def run_sanctions_eval() -> dict:
     """Does screening catch variations of a listed name, and leave innocent people alone?
     Always the fictional list, so the score is the same on every machine: it tests the matching, not the real lists."""
@@ -185,8 +244,11 @@ def main() -> None:
     print("\nSanctions: what the dev set got wrong")
     sanctions = run_sanctions_eval()
     print_sanctions(sanctions)
+    print("\nGrounding: what the dev set got wrong (loading the NLI model can take a minute)")
+    grounding = run_grounding_eval()
+    print_grounding(grounding)
     RESULTS.parent.mkdir(parents=True, exist_ok=True)
-    results = {"policy": get_policy().version, "attacks": attacks, "names": names, "sanctions": sanctions}
+    results = {"policy": get_policy().version, "attacks": attacks, "names": names, "sanctions": sanctions, "grounding": grounding}
     RESULTS.write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
     print(f"\nSaved to {RESULTS.relative_to(ROOT)}")
 
