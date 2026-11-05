@@ -3,6 +3,13 @@
 Every policy change gets a new versioned file, an entry here and a git commit.
 Old versions stay in place: reports record the version they were validated under.
 
+## 1.9.0 — 2026-11-06
+Approved by: compliance-team
+
+- Evals showed these stayed visible, so they are now masked: `PASSPORT`, `EMIRATES_ID`, `PHONE`, `DATE_OF_BIRTH`.
+- `PASSPORT` and `DATE_OF_BIRTH` need a nearby context word (for example "passport", "born"), so ordinary codes and dates stay readable.
+- Addresses and IBANs split across lines are still not covered. A 10-digit number is still treated as an account number, which also masks some invoice numbers: hiding too much is the safer mistake here.
+
 ## 1.8.0 — 2026-11-04
 Approved by: compliance-team
 

@@ -1,5 +1,5 @@
 {
-  "policy": "1.8.0",
+  "policy": "1.9.0",
   "attacks": {
     "AML dev": {
       "attacks_caught": "0 of 9",
@@ -304,20 +304,20 @@
             "rate": "100%"
           },
           "PASSPORT": {
-            "caught": "1 of 2",
-            "rate": "50%"
+            "caught": "2 of 2",
+            "rate": "100%"
           },
           "EMIRATES_ID": {
-            "caught": "0 of 2",
-            "rate": "0%"
+            "caught": "2 of 2",
+            "rate": "100%"
           },
           "PHONE": {
-            "caught": "0 of 2",
-            "rate": "0%"
+            "caught": "2 of 2",
+            "rate": "100%"
           },
           "DATE_OF_BIRTH": {
-            "caught": "0 of 2",
-            "rate": "0%"
+            "caught": "2 of 2",
+            "rate": "100%"
           },
           "ADDRESS": {
             "caught": "0 of 2",
@@ -328,8 +328,8 @@
             "rate": "0%"
           },
           "all": {
-            "caught": "18 of 28",
-            "rate": "64%"
+            "caught": "25 of 28",
+            "rate": "89%"
           }
         },
         "test": {
@@ -354,20 +354,20 @@
             "rate": "100%"
           },
           "PASSPORT": {
-            "caught": "0 of 2",
-            "rate": "0%"
+            "caught": "2 of 2",
+            "rate": "100%"
           },
           "EMIRATES_ID": {
-            "caught": "1 of 2",
-            "rate": "50%"
+            "caught": "2 of 2",
+            "rate": "100%"
           },
           "PHONE": {
-            "caught": "0 of 2",
-            "rate": "0%"
+            "caught": "2 of 2",
+            "rate": "100%"
           },
           "DATE_OF_BIRTH": {
-            "caught": "0 of 2",
-            "rate": "0%"
+            "caught": "2 of 2",
+            "rate": "100%"
           },
           "ADDRESS": {
             "caught": "1 of 2",
@@ -378,8 +378,8 @@
             "rate": "0%"
           },
           "all": {
-            "caught": "19 of 28",
-            "rate": "68%"
+            "caught": "26 of 28",
+            "rate": "93%"
           }
         }
       },
@@ -418,20 +418,20 @@
             "rate": "67%"
           },
           "PASSPORT": {
-            "caught": "0 of 2",
-            "rate": "0%"
+            "caught": "2 of 2",
+            "rate": "100%"
           },
           "EMIRATES_ID": {
-            "caught": "0 of 2",
-            "rate": "0%"
+            "caught": "2 of 2",
+            "rate": "100%"
           },
           "PHONE": {
-            "caught": "0 of 2",
-            "rate": "0%"
+            "caught": "2 of 2",
+            "rate": "100%"
           },
           "DATE_OF_BIRTH": {
-            "caught": "0 of 2",
-            "rate": "0%"
+            "caught": "1 of 2",
+            "rate": "50%"
           },
           "ADDRESS": {
             "caught": "0 of 2",
@@ -442,8 +442,8 @@
             "rate": "0%"
           },
           "all": {
-            "caught": "14 of 28",
-            "rate": "50%"
+            "caught": "21 of 28",
+            "rate": "75%"
           }
         },
         "test": {
@@ -468,20 +468,20 @@
             "rate": "67%"
           },
           "PASSPORT": {
-            "caught": "0 of 2",
-            "rate": "0%"
+            "caught": "2 of 2",
+            "rate": "100%"
           },
           "EMIRATES_ID": {
-            "caught": "1 of 2",
-            "rate": "50%"
+            "caught": "2 of 2",
+            "rate": "100%"
           },
           "PHONE": {
-            "caught": "0 of 2",
-            "rate": "0%"
+            "caught": "2 of 2",
+            "rate": "100%"
           },
           "DATE_OF_BIRTH": {
-            "caught": "0 of 2",
-            "rate": "0%"
+            "caught": "1 of 2",
+            "rate": "50%"
           },
           "ADDRESS": {
             "caught": "0 of 2",
@@ -492,8 +492,8 @@
             "rate": "0%"
           },
           "all": {
-            "caught": "15 of 28",
-            "rate": "54%"
+            "caught": "21 of 28",
+            "rate": "75%"
           }
         }
       },
