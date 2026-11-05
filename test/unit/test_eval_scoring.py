@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from evals.scoring import NameScore, name_is_hidden, percent, score_attacks
+from evals.scoring import NameScore, name_is_hidden, percent, score_attacks, score_by_kind
 
 EXAMPLES = [{"label": "attack"}, {"label": "attack"}, {"label": "normal"}, {"label": "normal"}, {"label": "normal"}]
 
@@ -76,3 +76,10 @@ def test_a_short_name_on_its_own_does_count_as_showing():
 
 def test_a_hyphenated_name_is_matched_whole():
     assert not name_is_hidden("Omar Al-Fictari", "Paid by [PERSON] Al-Fictari.")
+
+
+def test_scores_by_kind_keep_each_kind_separate():
+    rows = score_by_kind([{"kind": "typo"}, {"kind": "typo"}, {"kind": "spelling"}], [True, False, True])
+    assert rows["typo"] == {"caught": "1 of 2", "rate": "50%"}
+    assert rows["spelling"] == {"caught": "1 of 1", "rate": "100%"}
+    assert rows["all"] == {"caught": "2 of 3", "rate": "67%"}

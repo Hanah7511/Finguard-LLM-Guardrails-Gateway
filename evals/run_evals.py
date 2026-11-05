@@ -16,9 +16,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from evals.scoring import NameScore, name_is_hidden, percent, score_attacks  # noqa: E402
+from evals.scoring import NameScore, name_is_hidden, percent, score_attacks, score_by_kind  # noqa: E402
 from src.config.policy_loader import get_policy  # noqa: E402
 from src.config.settings import get_settings  # noqa: E402
+from src.core.sanctions_screener import SanctionsScreener  # noqa: E402
 from src.input_guardrails.pii.presidio_detector import build_pii_detector  # noqa: E402
 from src.input_guardrails.pipeline import InjectionDetector, PatternSafetyClassifier  # noqa: E402
 
@@ -116,6 +117,44 @@ def run_names_eval() -> dict:
     return {"groups": table, "normal_text": wrong}
 
 
+def run_sanctions_eval() -> dict:
+    """Does screening catch variations of a listed name, and leave innocent people alone?
+    Always the fictional list, so the score is the same on every machine: it tests the matching, not the real lists."""
+    policy = get_policy()
+    screener = SanctionsScreener.from_policy(get_settings().sanctions_test_list_path, policy.sanctions_screening, "test")
+    data = json.loads((DATASETS / "sanctions.json").read_text(encoding="utf-8"))
+
+    def flagged(name: str) -> bool:
+        return screener.screen(name).recommendation != "clear"
+
+    listed, innocent = {}, {}
+    for split, examples in data["listed"].items():
+        caught = [flagged(e["name"]) for e in examples]
+        listed[split] = score_by_kind(examples, caught)
+        if split == "dev":  # never for the test set
+            for example, was_caught in zip(examples, caught):
+                if not was_caught:
+                    print(f"  dev miss ({example['kind']}): {example['name']}")
+    for split, names in data["innocent"].items():
+        wrongly = [n for n in names if flagged(n)]
+        innocent[split] = {"wrongly_flagged": f"{len(wrongly)} of {len(names)}", "rate": percent(len(wrongly) / len(names))}
+        if split == "dev":
+            for name in wrongly:
+                print(f"  dev false alarm: {name}")
+    return {"threshold": policy.sanctions_screening.fuzzy_match_threshold, "listed": listed, "innocent": innocent}
+
+
+def print_sanctions(sanctions: dict) -> None:
+    print(f"\nSanctions: was a variation of a listed name caught? (match threshold {sanctions['threshold']})")
+    print(f"  {'kind':<30}{'dev':<14}{'test':<14}test rate")
+    for kind in sanctions["listed"]["test"]:
+        dev, test = sanctions["listed"]["dev"][kind], sanctions["listed"]["test"][kind]
+        print(f"  {kind:<30}{dev['caught']:<14}{test['caught']:<14}{test['rate']}")
+    print("\nSanctions: innocent names wrongly flagged")
+    for split, row in sanctions["innocent"].items():
+        print(f"  {split:<30}{row['wrongly_flagged']:<14}{row['rate']}")
+
+
 def print_names(names: dict) -> None:
     print("\nNames: is every word of the name hidden?")
     print(f"  {'group':<30}{'dev':<14}{'test':<14}test recall")
@@ -143,8 +182,11 @@ def main() -> None:
     print("\nNames: what the dev set got wrong (loading the name model can take a minute)")
     names = run_names_eval()
     print_names(names)
+    print("\nSanctions: what the dev set got wrong")
+    sanctions = run_sanctions_eval()
+    print_sanctions(sanctions)
     RESULTS.parent.mkdir(parents=True, exist_ok=True)
-    results = {"policy": get_policy().version, "attacks": attacks, "names": names}
+    results = {"policy": get_policy().version, "attacks": attacks, "names": names, "sanctions": sanctions}
     RESULTS.write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
     print(f"\nSaved to {RESULTS.relative_to(ROOT)}")
 

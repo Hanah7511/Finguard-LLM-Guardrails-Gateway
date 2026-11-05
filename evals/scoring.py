@@ -53,6 +53,18 @@ class NameScore:
         return {"names_hidden": f"{self.hidden} of {self.names}", "recall": percent(self.recall)}
 
 
+def score_by_kind(examples: list[dict], caught: list[bool]) -> dict[str, dict]:
+    """Caught counts per kind, so one easy kind cannot hide a weak one."""
+    if len(examples) != len(caught):
+        raise ValueError("one decision is needed for each example")
+    kinds: dict[str, list[bool]] = {}
+    for example, was_caught in zip(examples, caught):
+        kinds.setdefault(example["kind"], []).append(was_caught)
+    rows = {kind: {"caught": f"{sum(v)} of {len(v)}", "rate": percent(sum(v) / len(v))} for kind, v in kinds.items()}
+    rows["all"] = {"caught": f"{sum(caught)} of {len(caught)}", "rate": percent(sum(caught) / len(caught)) if caught else "n/a"}
+    return rows
+
+
 def score_attacks(examples: list[dict], blocked: list[bool]) -> AttackScore:
     """examples have label "attack" or "normal"; blocked says what FinGuard did with each."""
     if len(examples) != len(blocked):

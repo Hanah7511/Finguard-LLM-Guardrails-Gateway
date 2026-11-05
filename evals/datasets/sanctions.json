@@ -1,0 +1,57 @@
+{
+  "_note": "Tested against the FICTIONAL test list only. Every name here is made up, including the people who should come back clear. 'listed' names are variations of a test-list entry and must be caught. 'innocent' names must not be flagged. Tune on dev only.",
+  "listed": {
+    "dev": [
+      {"name": "Mohamed Al Exampleh", "kind": "spelling"},
+      {"name": "Muhammed Al Exampleh", "kind": "spelling"},
+      {"name": "Victor Sampleoff", "kind": "spelling"},
+      {"name": "Yana Demonstrova", "kind": "spelling"},
+      {"name": "Akhmed Fakeri", "kind": "spelling"},
+      {"name": "Sampleov Viktor", "kind": "word order"},
+      {"name": "Testani Khalid", "kind": "word order"},
+      {"name": "Fakeri, Ahmed", "kind": "word order"},
+      {"name": "Mohammed Exampleh", "kind": "missing part"},
+      {"name": "Northwind Trading", "kind": "missing part"},
+      {"name": "Testa Holdings", "kind": "missing part"},
+      {"name": "Viktor Sampleevov", "kind": "typo"},
+      {"name": "Jana Demonstrva", "kind": "typo"},
+      {"name": "Khalid Testanni", "kind": "typo"},
+      {"name": "V. Sampleov", "kind": "initial"},
+      {"name": "K Testani", "kind": "initial"},
+      {"name": "خالد تستاني", "kind": "Arabic script"},
+      {"name": "أحمد فكري", "kind": "Arabic script"}
+    ],
+    "test": [
+      {"name": "Mohammad Al Exampleh", "kind": "spelling"},
+      {"name": "Mouhamed Al Exampleh", "kind": "spelling"},
+      {"name": "Vicktor Sampleov", "kind": "spelling"},
+      {"name": "Jhana Demonstrova", "kind": "spelling"},
+      {"name": "Ahmad Fakeri", "kind": "spelling"},
+      {"name": "Demonstrova Jana", "kind": "word order"},
+      {"name": "Al Exampleh Mohammed", "kind": "word order"},
+      {"name": "Testani, Khaled", "kind": "word order"},
+      {"name": "Mohammed Al", "kind": "missing part"},
+      {"name": "Northwind Shell", "kind": "missing part"},
+      {"name": "Fictiva Holdings", "kind": "missing part"},
+      {"name": "Viktro Sampleov", "kind": "typo"},
+      {"name": "Ahmed Fakerri", "kind": "typo"},
+      {"name": "Khalid Tesani", "kind": "typo"},
+      {"name": "J. Demonstrova", "kind": "initial"},
+      {"name": "A Fakeri", "kind": "initial"},
+      {"name": "محمد الإكسامبله", "kind": "Arabic script"},
+      {"name": "فيكتور سامبليوف", "kind": "Arabic script"}
+    ]
+  },
+  "innocent": {
+    "dev": [
+      "Viktor Samuelsson", "Jana Demidova", "Khalid Tesfaye", "Mohammed Al Rashidi", "Ahmed Fakhrani",
+      "Clara Openfield", "Omar Brightwater", "Northern Wind Farms LLC", "Testa Rossa Restaurant", "Fiction House Holdings",
+      "Victor Sampson", "Ahmed Mansoor", "Khaled Tamimi", "Mohammed Ibrahim", "Sample Trading Ltd"
+    ],
+    "test": [
+      "Viktor Semenov", "Jana Novakova", "Khalid Tahir", "Mohammed Al Hashimi", "Ahmed Faris",
+      "Grace Holloway", "Rahul Deshmukh", "Northwind Bakery", "Testa Family Foods", "Fictiva Trading LLC",
+      "Victor Sanders", "Ahmed Rahman", "Khaled Tariq", "Mohamed Elsayed", "Example Logistics Ltd"
+    ]
+  }
+}
