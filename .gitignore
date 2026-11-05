@@ -36,3 +36,6 @@ data/law_store/regulations_local.json
 
 # Real sanctions lists: large, change daily, rebuilt by scripts/build_sanctions_lists.py
 data/sanctions/sanctions_list.json
+
+# Public eval data: downloaded when needed, never committed
+evals/cache/

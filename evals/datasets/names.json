@@ -1,0 +1,91 @@
+{
+  "_note": "Made-up test data. Common first names with mostly invented surnames: not meant to be anyone real, and not a list of suspects. Tune on dev only.",
+  "templates": [
+    "Wire sent by {name} on 12 May.",
+    "Customer {name} deposited cash at the branch.",
+    "The account holder is {name}.",
+    "{name} transferred funds to a trading company.",
+    "Please review the alert for {name}.",
+    "A payment was received from {name} yesterday."
+  ],
+  "groups": {
+    "English": {
+      "dev": ["Clara Openfield", "Thomas Ashcombe", "Emily Harwick", "James Thornbury", "Sarah Pellworth", "Oliver Kingsmere", "Hannah Dunmore", "George Whitlock", "Lucy Marchbank", "Daniel Fenwick", "Grace Holloway", "Peter Lanfield", "Rachel Brightwell", "Simon Aldercott", "Amy Rowbotham"],
+      "test": ["Margaret Stonehill", "William Crossley", "Charlotte Penhale", "Edward Ravenscroft", "Alice Thorncroft", "Henry Wetherby", "Sophie Lockridge", "Jack Merriweather", "Laura Fairbrook", "Andrew Hartwell", "Megan Ellsworth", "Robert Claypole", "Julia Winterbourne", "Nathan Greaves", "Helen Oakhurst"]
+    },
+    "Arabic, in English letters": {
+      "dev": ["Omar Brightwater", "Yusuf Al-Fictari", "Fatima Zahra Testani", "Khalid Al-Mansoori", "Layla Haddadin", "Ahmed Bin Tarique", "Noor Al-Rashidi", "Hassan Qasimi", "Mariam Al-Sabbagh", "Tariq Abu-Nasser", "Salma Darwishi", "Ibrahim Al-Hashmi", "Aisha Bin Sultan", "Karim Mahfouzi", "Rania El-Khoury"],
+      "test": ["Abdullah Al-Fahim", "Huda Al-Marzooqi", "Saeed Bin Hamdan", "Zainab Al-Ansari", "Majid Al-Dhaheri", "Reem Khalifani", "Bilal Al-Qasim", "Dana Al-Nuaimi", "Faisal Abu-Rahma", "Amal Shehadeh", "Mansour El-Sayedi", "Lubna Al-Tamimi", "Nasser Bin Ali", "Yasmin Barakati", "Walid Al-Kindi"]
+    },
+    "South Asian": {
+      "dev": ["Priya Testanathan", "Arjun Venkataraman", "Sana Chaudhry", "Rahul Deshmukh", "Ananya Krishnaswamy", "Imran Siddiqui", "Kavita Iyengar", "Vikram Rathore", "Nisha Bhattacharya", "Farhan Qureshi", "Meera Subramanian", "Rohan Kulkarni", "Ayesha Malikzada", "Suresh Pillai", "Divya Menon"],
+      "test": ["Aditya Banerjee", "Lakshmi Raghavan", "Tahir Mirza", "Pooja Gokhale", "Sanjay Natarajan", "Zara Hussainy", "Manish Trivedi", "Deepa Chandrasekar", "Karan Ahluwalia", "Rukhsana Baig", "Harish Nambiar", "Sneha Patwardhan", "Bilawal Khattak", "Geeta Mukherjee", "Nikhil Sundaram"]
+    },
+    "East Asian": {
+      "dev": ["Chen Wei", "Li Na", "Hiroshi Tanabe", "Yuki Morimoto", "Kim Soo-jin", "Park Ji-hoon", "Nguyen Thi Lan", "Tran Van Minh", "Wang Xiuying", "Zhang Haoran", "Sato Kenji", "Choi Min-seo", "Liu Yang", "Pham Quoc Bao", "Lin Mei"],
+      "test": ["Huang Jianguo", "Takeshi Fujiwara", "Aiko Nishimura", "Lee Dong-hyun", "Han Ji-woo", "Le Thi Hoa", "Zhao Lei", "Xu Ming", "Kenta Yoshikawa", "Hoang Duc Anh", "Sun Lihua", "Kang Eun-ji", "Wu Tao", "Mai Phuong", "Ito Haruka"]
+    },
+    "African": {
+      "dev": ["Kwame Asantewa", "Ngozi Okafor", "Thabo Mokoena", "Amina Diallo", "Chukwudi Eze", "Wanjiru Kamau", "Sipho Dlamini", "Fatoumata Traore", "Oluwaseun Adeyemi", "Zanele Khumalo", "Kofi Mensah", "Abebe Tesfaye", "Nia Odhiambo", "Babatunde Ogunleye", "Lindiwe Ndlovu"],
+      "test": ["Tendai Moyo", "Adaeze Nwosu", "Kipchoge Rotich", "Mariama Sesay", "Emeka Obi", "Nomvula Zulu", "Yaw Boateng", "Halima Abdi", "Tunde Bakare", "Achieng Otieno", "Moussa Coulibaly", "Thandiwe Nkosi", "Kagiso Molefe", "Ifeoma Chukwu", "Dawit Haile"]
+    },
+    "Hispanic": {
+      "dev": ["Carlos Mendoza", "Maria Fernandez Ruiz", "Javier Castellano", "Lucia Moralez", "Diego Santacruz", "Ana Belen Ortega", "Miguel Quintanilla", "Sofia Villanueva", "Alejandro Bustamante", "Carmen Echeverria", "Pablo Arriaga", "Valentina Zamora", "Rafael Montenegro", "Isabel Cifuentes", "Andres Galindo"],
+      "test": ["Fernando Altamirano", "Elena Navarrete", "Ricardo Solorzano", "Paula Benavides", "Hector Urrutia", "Gabriela Montoya", "Luis Barrientos", "Daniela Carrasquillo", "Sergio Peralta", "Marta Iglesias", "Jorge Valdivia", "Camila Sandoval", "Emilio Olivares", "Natalia Duarte", "Ramon Figueroa"]
+    },
+    "Mohammed spellings": {
+      "dev": ["Mohammed Al-Fictari", "Mohammad Al-Fictari", "Muhammad Al-Fictari", "Mohamed Al-Fictari", "Muhammed Al-Fictari", "Mohamad Al-Fictari"],
+      "test": ["Mohammed Brightwater", "Mohammad Brightwater", "Muhammad Brightwater", "Mohamed Brightwater", "Muhammed Brightwater", "Mohamad Brightwater"]
+    },
+    "Arabic script": {
+      "dev": ["يوسف الفكتاري", "فاطمة الزهراء", "خالد المنصوري", "ليلى حدادين", "عمر بن طارق", "نور الراشدي", "حسن القاسمي", "مريم الصباغ", "طارق أبو ناصر", "سلمى درويش"],
+      "test": ["عبدالله الفاهم", "هدى المرزوقي", "سعيد بن حمدان", "زينب الأنصاري", "ماجد الظاهري", "ريم خليفة", "بلال القاسم", "دانة النعيمي", "فيصل أبو رحمة", "أمل شحادة"]
+    }
+  },
+  "normal": {
+    "dev": [
+      "Customer IBAN is on file.",
+      "The Compliance Officer reviewed the Suspicious Activity Report.",
+      "Review alert ALT-2026-006 for structuring at the Dubai branch.",
+      "Twelve cash deposits were made last week.",
+      "The Sanctions Team escalated the case to Legal.",
+      "Funds moved from Germany to the United Arab Emirates.",
+      "The transaction exceeded the reporting threshold.",
+      "Risk score is high because of velocity and new device flags.",
+      "Please file a Currency Transaction Report by Friday.",
+      "The beneficial owner holds 60 percent of the shares.",
+      "Account opened in March and closed in June.",
+      "Know Your Customer checks were completed on Monday.",
+      "Trade finance documents were missing from the file.",
+      "The Bank Secrecy Act requires this record to be kept.",
+      "Wire transfer flagged by the Monitoring System.",
+      "Enhanced Due Diligence is needed for this account.",
+      "Cash Intensive Business, reviewed by the Head of Compliance.",
+      "The Financial Action Task Force updated its list in June.",
+      "Dormant Account became active after two years.",
+      "Senior Analyst approved the case notes."
+    ],
+    "test": [
+      "Customer Account Number was verified.",
+      "The Money Laundering Reporting Officer signed the form.",
+      "Alert closed after review by the Investigation Team.",
+      "Deposits were split across three branches in Abu Dhabi.",
+      "Shell Company ownership could not be confirmed.",
+      "The Central Bank published new guidance in April.",
+      "Payment Reference is missing from the wire.",
+      "Politically Exposed Person status must be checked.",
+      "Funds were sent through a correspondent bank in London.",
+      "The Case Manager reassigned this alert on Tuesday.",
+      "High Risk Jurisdiction appears in the transaction path.",
+      "Source of Funds documents were requested again.",
+      "The Audit Committee reviewed the quarterly report.",
+      "Transaction Monitoring raised forty alerts this month.",
+      "Foreign Exchange activity increased sharply in May.",
+      "Regulatory Reporting is due at the end of the quarter.",
+      "Sanctions Screening returned no match.",
+      "Branch Manager confirmed the cash deposit.",
+      "Tax Residency form was not completed.",
+      "Beneficiary Bank rejected the payment."
+    ]
+  }
+}
