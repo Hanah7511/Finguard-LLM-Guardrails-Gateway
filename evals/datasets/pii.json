@@ -1,0 +1,375 @@
+{
+  "_note": "All values are published test values or made up: card numbers are standard payment test numbers, IBANs are documentation examples, emails use example.com, and the SSNs are invented. 'normal' sentences hold numbers that are not personal data and must stay visible. Tune on dev only. The passport, Emirates ID, phone, date of birth and address rows are made up, and measure types the policy does not cover yet.",
+  "values": {
+    "dev": [
+      {
+        "type": "IBAN_CODE",
+        "kind": "spaces",
+        "value": "GB82 WEST 1234 5698 7654 32",
+        "template": "Deposit received from IBAN {value} on Monday."
+      },
+      {
+        "type": "IBAN_CODE",
+        "kind": "no spaces",
+        "value": "DE89370400440532013000",
+        "template": "Beneficiary account {value} received the funds."
+      },
+      {
+        "type": "IBAN_CODE",
+        "kind": "UAE",
+        "value": "AE070331234567890123456",
+        "template": "The transfer went to {value} in Dubai."
+      },
+      {
+        "type": "IBAN_CODE",
+        "kind": "small letters",
+        "value": "gb82 west 1234 5698 7654 32",
+        "template": "The customer wrote {value} on the form."
+      },
+      {
+        "type": "CREDIT_CARD",
+        "kind": "dashes",
+        "value": "4111-1111-1111-1111",
+        "template": "Card {value} was used at the branch."
+      },
+      {
+        "type": "CREDIT_CARD",
+        "kind": "no spaces",
+        "value": "5555555555554444",
+        "template": "Payment made with card {value} yesterday."
+      },
+      {
+        "type": "CREDIT_CARD",
+        "kind": "spaces",
+        "value": "3782 822463 10005",
+        "template": "The statement shows card {value} as active."
+      },
+      {
+        "type": "CREDIT_CARD",
+        "kind": "no label",
+        "value": "4012888888881881",
+        "template": "Reference given by the customer was {value} last week."
+      },
+      {
+        "type": "US_SSN",
+        "kind": "dashes",
+        "value": "212-55-4821",
+        "template": "Customer SSN is {value} according to the file."
+      },
+      {
+        "type": "US_SSN",
+        "kind": "no dashes",
+        "value": "212554822",
+        "template": "Social security number {value} was provided."
+      },
+      {
+        "type": "US_SSN",
+        "kind": "no label",
+        "value": "345-12-6789",
+        "template": "The form lists {value} for the applicant."
+      },
+      {
+        "type": "EMAIL_ADDRESS",
+        "kind": "plain",
+        "value": "jane.doe@example.com",
+        "template": "Contact the customer at {value} today."
+      },
+      {
+        "type": "EMAIL_ADDRESS",
+        "kind": "plus sign",
+        "value": "omar+alerts@example.org",
+        "template": "Notices were sent to {value} last month."
+      },
+      {
+        "type": "EMAIL_ADDRESS",
+        "kind": "capitals",
+        "value": "J.SMITH@EXAMPLE.NET",
+        "template": "The sender was {value} on the wire form."
+      },
+      {
+        "type": "ACCOUNT_NUMBER",
+        "kind": "with word account",
+        "value": "1234567890",
+        "template": "Funds moved from account {value} on Friday."
+      },
+      {
+        "type": "ACCOUNT_NUMBER",
+        "kind": "with acct",
+        "value": "9876543210",
+        "template": "Acct {value} shows twelve cash deposits."
+      },
+      {
+        "type": "ACCOUNT_NUMBER",
+        "kind": "no label",
+        "value": "5566778899",
+        "template": "The payment came from {value} yesterday."
+      },
+      {
+        "type": "PASSPORT",
+        "kind": "not covered yet",
+        "value": "N1234567",
+        "template": "Passport number {value} was presented at the branch."
+      },
+      {
+        "type": "PASSPORT",
+        "kind": "not covered yet",
+        "value": "X7654321",
+        "template": "The customer's passport is {value} according to the file."
+      },
+      {
+        "type": "EMIRATES_ID",
+        "kind": "not covered yet",
+        "value": "784-1990-1234567-1",
+        "template": "Emirates ID {value} is on file."
+      },
+      {
+        "type": "EMIRATES_ID",
+        "kind": "not covered yet",
+        "value": "784199076543217",
+        "template": "The form lists Emirates ID {value} for the applicant."
+      },
+      {
+        "type": "PHONE",
+        "kind": "not covered yet",
+        "value": "+971 50 123 4567",
+        "template": "The contact phone is {value} for this customer."
+      },
+      {
+        "type": "PHONE",
+        "kind": "not covered yet",
+        "value": "050-765-4321",
+        "template": "Please call the customer on {value} today."
+      },
+      {
+        "type": "DATE_OF_BIRTH",
+        "kind": "not covered yet",
+        "value": "12 March 1980",
+        "template": "Date of birth is {value} on the form."
+      },
+      {
+        "type": "DATE_OF_BIRTH",
+        "kind": "not covered yet",
+        "value": "1975-05-05",
+        "template": "The applicant was born on {value} in Dubai."
+      },
+      {
+        "type": "ADDRESS",
+        "kind": "not covered yet",
+        "value": "45 Marina Walk, Dubai",
+        "template": "The customer lives at {value} according to the file."
+      },
+      {
+        "type": "ADDRESS",
+        "kind": "not covered yet",
+        "value": "PO Box 12345, Abu Dhabi",
+        "template": "Statements are sent to {value} each month."
+      },
+      {
+        "type": "IBAN_SPLIT",
+        "kind": "not covered yet",
+        "value": "GB82 WEST\n1234 5698 7654 32",
+        "template": "The note reads {value} for this payment."
+      }
+    ],
+    "test": [
+      {
+        "type": "IBAN_CODE",
+        "kind": "spaces",
+        "value": "FR76 3000 6000 0112 3456 7890 189",
+        "template": "Deposit received from IBAN {value} on Tuesday."
+      },
+      {
+        "type": "IBAN_CODE",
+        "kind": "no spaces",
+        "value": "NL91ABNA0417164300",
+        "template": "The wire was sent to {value} last week."
+      },
+      {
+        "type": "IBAN_CODE",
+        "kind": "Saudi",
+        "value": "SA0380000000608010167519",
+        "template": "Funds were routed through {value} in Riyadh."
+      },
+      {
+        "type": "IBAN_CODE",
+        "kind": "small letters",
+        "value": "de89 3704 0044 0532 0130 00",
+        "template": "The analyst copied {value} into the note."
+      },
+      {
+        "type": "CREDIT_CARD",
+        "kind": "dashes",
+        "value": "5105-1051-0510-5100",
+        "template": "Card {value} was declined twice."
+      },
+      {
+        "type": "CREDIT_CARD",
+        "kind": "no spaces",
+        "value": "4242424242424242",
+        "template": "Cash advance taken on card {value} last night."
+      },
+      {
+        "type": "CREDIT_CARD",
+        "kind": "spaces",
+        "value": "3714 496353 98431",
+        "template": "The dispute concerns card {value} only."
+      },
+      {
+        "type": "CREDIT_CARD",
+        "kind": "no label",
+        "value": "6011111111111117",
+        "template": "The customer quoted {value} on the phone."
+      },
+      {
+        "type": "US_SSN",
+        "kind": "dashes",
+        "value": "234-56-7891",
+        "template": "Customer SSN is {value} according to the record."
+      },
+      {
+        "type": "US_SSN",
+        "kind": "no dashes",
+        "value": "345678912",
+        "template": "Social security number {value} did not verify."
+      },
+      {
+        "type": "US_SSN",
+        "kind": "no label",
+        "value": "456-78-9123",
+        "template": "The application shows {value} for this person."
+      },
+      {
+        "type": "EMAIL_ADDRESS",
+        "kind": "plain",
+        "value": "clara.openfield@example.com",
+        "template": "Please write to {value} about this alert."
+      },
+      {
+        "type": "EMAIL_ADDRESS",
+        "kind": "plus sign",
+        "value": "ops+aml@example.org",
+        "template": "The report was copied to {value} as well."
+      },
+      {
+        "type": "EMAIL_ADDRESS",
+        "kind": "capitals",
+        "value": "OMAR.B@EXAMPLE.NET",
+        "template": "The request came from {value} this morning."
+      },
+      {
+        "type": "ACCOUNT_NUMBER",
+        "kind": "with word account",
+        "value": "1029384756",
+        "template": "Cash went into account {value} on Sunday."
+      },
+      {
+        "type": "ACCOUNT_NUMBER",
+        "kind": "with a/c",
+        "value": "6677889900",
+        "template": "Transfer to a/c {value} was flagged."
+      },
+      {
+        "type": "ACCOUNT_NUMBER",
+        "kind": "no label",
+        "value": "3344556677",
+        "template": "Five deposits landed in {value} this week."
+      },
+      {
+        "type": "PASSPORT",
+        "kind": "not covered yet",
+        "value": "P9988776",
+        "template": "Passport number {value} was checked by the analyst."
+      },
+      {
+        "type": "PASSPORT",
+        "kind": "not covered yet",
+        "value": "K1122334",
+        "template": "The traveller's passport {value} expired last year."
+      },
+      {
+        "type": "EMIRATES_ID",
+        "kind": "not covered yet",
+        "value": "784-1985-7654321-2",
+        "template": "Emirates ID {value} did not verify."
+      },
+      {
+        "type": "EMIRATES_ID",
+        "kind": "not covered yet",
+        "value": "784200012345670",
+        "template": "The account was opened with Emirates ID {value} in June."
+      },
+      {
+        "type": "PHONE",
+        "kind": "not covered yet",
+        "value": "+971 4 555 0123",
+        "template": "The office number is {value} for this company."
+      },
+      {
+        "type": "PHONE",
+        "kind": "not covered yet",
+        "value": "055 987 6543",
+        "template": "A message was left on {value} yesterday."
+      },
+      {
+        "type": "DATE_OF_BIRTH",
+        "kind": "not covered yet",
+        "value": "3 July 1992",
+        "template": "Her date of birth is {value} in the record."
+      },
+      {
+        "type": "DATE_OF_BIRTH",
+        "kind": "not covered yet",
+        "value": "1988-11-30",
+        "template": "DOB {value} was provided with the application."
+      },
+      {
+        "type": "ADDRESS",
+        "kind": "not covered yet",
+        "value": "12 Corniche Road, Abu Dhabi",
+        "template": "The company is registered at {value} now."
+      },
+      {
+        "type": "ADDRESS",
+        "kind": "not covered yet",
+        "value": "Villa 8, Jumeirah 1, Dubai",
+        "template": "Mail was returned from {value} last month."
+      },
+      {
+        "type": "IBAN_SPLIT",
+        "kind": "not covered yet",
+        "value": "DE89 3704\n0044 0532 0130 00",
+        "template": "The scan shows {value} on the slip."
+      }
+    ]
+  },
+  "normal": {
+    "dev": [
+      "The transaction amount was 10,000 dollars.",
+      "Alert ALT-2026-006 was raised on 2026-11-05.",
+      "Twelve deposits totalling 45000 were made in June.",
+      "Reference TXN-2026001 appears on the wire.",
+      "The customer has held the account since 2019.",
+      "Report due within 30 calendar days.",
+      "Case CASE-2026-001 was closed at 14:30.",
+      "The law cited is 31 CFR 1010.311.",
+      "Branch 204 processed 1500 transactions this quarter.",
+      "Risk score rose from 0.42 to 0.91.",
+      "Reference number 1122334455 belongs to the invoice.",
+      "Invoice 2026110512 was paid on time."
+    ],
+    "test": [
+      "Cash deposits of 9500 and 9800 were made on the same day.",
+      "Alert ALT-2026-011 was reviewed on 2026-10-31.",
+      "The company owns 60 percent of the shares.",
+      "Reference TXN-2026050 was rejected by the bank.",
+      "The account was opened in 2021 and closed in 2024.",
+      "Keep records for five years, or 60 months.",
+      "Case CASE-2026-008 needs a report by 17:00.",
+      "See 31 U.S.C. 5324 for the penalty.",
+      "Terminal 3301 logged 275 payments last month.",
+      "The velocity score was 0.65 this week.",
+      "Order number 9081726354 was shipped on Monday.",
+      "Ticket 2026103101 was closed by the help desk."
+    ]
+  }
+}

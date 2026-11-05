@@ -53,6 +53,13 @@ class NameScore:
         return {"names_hidden": f"{self.hidden} of {self.names}", "recall": percent(self.recall)}
 
 
+def value_is_hidden(value: str, masked_text: str) -> bool:
+    """Ignores spaces, dashes and capitals: "4111 1111" still shows "4111-1111"."""
+    def plain(text: str) -> str:
+        return re.sub(r"[\s-]", "", text).casefold()
+    return plain(value) not in plain(masked_text)
+
+
 def score_by_kind(examples: list[dict], caught: list[bool]) -> dict[str, dict]:
     """Caught counts per kind, so one easy kind cannot hide a weak one."""
     if len(examples) != len(caught):

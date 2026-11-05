@@ -1,0 +1,512 @@
+{
+  "policy": "1.8.0",
+  "attacks": {
+    "AML dev": {
+      "attacks_caught": "0 of 9",
+      "catch_rate": "0%",
+      "normal_blocked": "0 of 9",
+      "false_block_rate": "0%"
+    },
+    "AML test": {
+      "attacks_caught": "0 of 6",
+      "catch_rate": "0%",
+      "normal_blocked": "0 of 6",
+      "false_block_rate": "0%"
+    },
+    "public, deepset": {
+      "attacks_caught": "0 of 60",
+      "catch_rate": "0%",
+      "normal_blocked": "0 of 56",
+      "false_block_rate": "0%"
+    },
+    "public, Gandalf": {
+      "attacks_caught": "19 of 112",
+      "catch_rate": "17%",
+      "normal_blocked": "0 of 0",
+      "false_block_rate": "n/a"
+    }
+  },
+  "names": {
+    "groups": {
+      "English": {
+        "dev": {
+          "names_hidden": "14 of 15",
+          "recall": "93%"
+        },
+        "test": {
+          "names_hidden": "13 of 15",
+          "recall": "87%"
+        }
+      },
+      "Arabic, in English letters": {
+        "dev": {
+          "names_hidden": "14 of 15",
+          "recall": "93%"
+        },
+        "test": {
+          "names_hidden": "14 of 15",
+          "recall": "93%"
+        }
+      },
+      "South Asian": {
+        "dev": {
+          "names_hidden": "7 of 15",
+          "recall": "47%"
+        },
+        "test": {
+          "names_hidden": "10 of 15",
+          "recall": "67%"
+        }
+      },
+      "East Asian": {
+        "dev": {
+          "names_hidden": "14 of 15",
+          "recall": "93%"
+        },
+        "test": {
+          "names_hidden": "11 of 15",
+          "recall": "73%"
+        }
+      },
+      "African": {
+        "dev": {
+          "names_hidden": "9 of 15",
+          "recall": "60%"
+        },
+        "test": {
+          "names_hidden": "8 of 15",
+          "recall": "53%"
+        }
+      },
+      "Hispanic": {
+        "dev": {
+          "names_hidden": "10 of 15",
+          "recall": "67%"
+        },
+        "test": {
+          "names_hidden": "10 of 15",
+          "recall": "67%"
+        }
+      },
+      "Mohammed spellings": {
+        "dev": {
+          "names_hidden": "5 of 6",
+          "recall": "83%"
+        },
+        "test": {
+          "names_hidden": "6 of 6",
+          "recall": "100%"
+        }
+      },
+      "Arabic script": {
+        "dev": {
+          "names_hidden": "0 of 10",
+          "recall": "0%"
+        },
+        "test": {
+          "names_hidden": "1 of 10",
+          "recall": "10%"
+        }
+      }
+    },
+    "normal_text": {
+      "dev": {
+        "wrongly_masked": "1 of 20",
+        "rate": "5%"
+      },
+      "test": {
+        "wrongly_masked": "1 of 20",
+        "rate": "5%"
+      }
+    }
+  },
+  "sanctions": {
+    "threshold": 0.85,
+    "listed": {
+      "dev": {
+        "spelling": {
+          "caught": "5 of 5",
+          "rate": "100%"
+        },
+        "word order": {
+          "caught": "3 of 3",
+          "rate": "100%"
+        },
+        "missing part": {
+          "caught": "2 of 3",
+          "rate": "67%"
+        },
+        "typo": {
+          "caught": "3 of 3",
+          "rate": "100%"
+        },
+        "initial": {
+          "caught": "0 of 2",
+          "rate": "0%"
+        },
+        "Arabic script": {
+          "caught": "0 of 2",
+          "rate": "0%"
+        },
+        "all": {
+          "caught": "13 of 18",
+          "rate": "72%"
+        }
+      },
+      "test": {
+        "spelling": {
+          "caught": "5 of 5",
+          "rate": "100%"
+        },
+        "word order": {
+          "caught": "3 of 3",
+          "rate": "100%"
+        },
+        "missing part": {
+          "caught": "0 of 3",
+          "rate": "0%"
+        },
+        "typo": {
+          "caught": "3 of 3",
+          "rate": "100%"
+        },
+        "initial": {
+          "caught": "1 of 2",
+          "rate": "50%"
+        },
+        "Arabic script": {
+          "caught": "0 of 2",
+          "rate": "0%"
+        },
+        "all": {
+          "caught": "12 of 18",
+          "rate": "67%"
+        }
+      }
+    },
+    "innocent": {
+      "dev": {
+        "wrongly_flagged": "0 of 15",
+        "rate": "0%"
+      },
+      "test": {
+        "wrongly_flagged": "1 of 15",
+        "rate": "7%"
+      }
+    }
+  },
+  "grounding": {
+    "true_claims": {
+      "dev": {
+        "accepted": "9 of 9",
+        "rate": "100%"
+      },
+      "test": {
+        "accepted": "8 of 9",
+        "rate": "89%"
+      }
+    },
+    "false_claims": {
+      "dev": {
+        "wrong number": {
+          "caught": "3 of 3",
+          "rate": "100%"
+        },
+        "opposite": {
+          "caught": "3 of 3",
+          "rate": "100%"
+        },
+        "not in the law": {
+          "caught": "3 of 3",
+          "rate": "100%"
+        },
+        "wrong citation": {
+          "caught": "2 of 2",
+          "rate": "100%"
+        },
+        "made-up citation": {
+          "caught": "2 of 2",
+          "rate": "100%"
+        },
+        "almost right": {
+          "caught": "3 of 5",
+          "rate": "60%"
+        },
+        "all": {
+          "caught": "16 of 18",
+          "rate": "89%"
+        }
+      },
+      "test": {
+        "wrong number": {
+          "caught": "3 of 3",
+          "rate": "100%"
+        },
+        "opposite": {
+          "caught": "3 of 3",
+          "rate": "100%"
+        },
+        "not in the law": {
+          "caught": "3 of 3",
+          "rate": "100%"
+        },
+        "wrong citation": {
+          "caught": "2 of 2",
+          "rate": "100%"
+        },
+        "made-up citation": {
+          "caught": "2 of 2",
+          "rate": "100%"
+        },
+        "almost right": {
+          "caught": "3 of 5",
+          "rate": "60%"
+        },
+        "all": {
+          "caught": "16 of 18",
+          "rate": "89%"
+        }
+      }
+    },
+    "scores": {
+      "dev": {
+        "lowest_true": 0.86,
+        "highest_false": 0.97
+      },
+      "test": {
+        "lowest_true": 0.0,
+        "highest_false": 0.98
+      }
+    }
+  },
+  "pii": {
+    "presidio": {
+      "values": {
+        "dev": {
+          "IBAN_CODE": {
+            "caught": "4 of 4",
+            "rate": "100%"
+          },
+          "CREDIT_CARD": {
+            "caught": "4 of 4",
+            "rate": "100%"
+          },
+          "US_SSN": {
+            "caught": "3 of 3",
+            "rate": "100%"
+          },
+          "EMAIL_ADDRESS": {
+            "caught": "3 of 3",
+            "rate": "100%"
+          },
+          "ACCOUNT_NUMBER": {
+            "caught": "3 of 3",
+            "rate": "100%"
+          },
+          "PASSPORT": {
+            "caught": "1 of 2",
+            "rate": "50%"
+          },
+          "EMIRATES_ID": {
+            "caught": "0 of 2",
+            "rate": "0%"
+          },
+          "PHONE": {
+            "caught": "0 of 2",
+            "rate": "0%"
+          },
+          "DATE_OF_BIRTH": {
+            "caught": "0 of 2",
+            "rate": "0%"
+          },
+          "ADDRESS": {
+            "caught": "0 of 2",
+            "rate": "0%"
+          },
+          "IBAN_SPLIT": {
+            "caught": "0 of 1",
+            "rate": "0%"
+          },
+          "all": {
+            "caught": "18 of 28",
+            "rate": "64%"
+          }
+        },
+        "test": {
+          "IBAN_CODE": {
+            "caught": "4 of 4",
+            "rate": "100%"
+          },
+          "CREDIT_CARD": {
+            "caught": "4 of 4",
+            "rate": "100%"
+          },
+          "US_SSN": {
+            "caught": "3 of 3",
+            "rate": "100%"
+          },
+          "EMAIL_ADDRESS": {
+            "caught": "3 of 3",
+            "rate": "100%"
+          },
+          "ACCOUNT_NUMBER": {
+            "caught": "3 of 3",
+            "rate": "100%"
+          },
+          "PASSPORT": {
+            "caught": "0 of 2",
+            "rate": "0%"
+          },
+          "EMIRATES_ID": {
+            "caught": "1 of 2",
+            "rate": "50%"
+          },
+          "PHONE": {
+            "caught": "0 of 2",
+            "rate": "0%"
+          },
+          "DATE_OF_BIRTH": {
+            "caught": "0 of 2",
+            "rate": "0%"
+          },
+          "ADDRESS": {
+            "caught": "1 of 2",
+            "rate": "50%"
+          },
+          "IBAN_SPLIT": {
+            "caught": "0 of 1",
+            "rate": "0%"
+          },
+          "all": {
+            "caught": "19 of 28",
+            "rate": "68%"
+          }
+        }
+      },
+      "normal_text": {
+        "dev": {
+          "wrongly_masked": "2 of 12",
+          "rate": "17%"
+        },
+        "test": {
+          "wrongly_masked": "2 of 12",
+          "rate": "17%"
+        }
+      }
+    },
+    "regex": {
+      "values": {
+        "dev": {
+          "IBAN_CODE": {
+            "caught": "3 of 4",
+            "rate": "75%"
+          },
+          "CREDIT_CARD": {
+            "caught": "4 of 4",
+            "rate": "100%"
+          },
+          "US_SSN": {
+            "caught": "2 of 3",
+            "rate": "67%"
+          },
+          "EMAIL_ADDRESS": {
+            "caught": "3 of 3",
+            "rate": "100%"
+          },
+          "ACCOUNT_NUMBER": {
+            "caught": "2 of 3",
+            "rate": "67%"
+          },
+          "PASSPORT": {
+            "caught": "0 of 2",
+            "rate": "0%"
+          },
+          "EMIRATES_ID": {
+            "caught": "0 of 2",
+            "rate": "0%"
+          },
+          "PHONE": {
+            "caught": "0 of 2",
+            "rate": "0%"
+          },
+          "DATE_OF_BIRTH": {
+            "caught": "0 of 2",
+            "rate": "0%"
+          },
+          "ADDRESS": {
+            "caught": "0 of 2",
+            "rate": "0%"
+          },
+          "IBAN_SPLIT": {
+            "caught": "0 of 1",
+            "rate": "0%"
+          },
+          "all": {
+            "caught": "14 of 28",
+            "rate": "50%"
+          }
+        },
+        "test": {
+          "IBAN_CODE": {
+            "caught": "3 of 4",
+            "rate": "75%"
+          },
+          "CREDIT_CARD": {
+            "caught": "4 of 4",
+            "rate": "100%"
+          },
+          "US_SSN": {
+            "caught": "2 of 3",
+            "rate": "67%"
+          },
+          "EMAIL_ADDRESS": {
+            "caught": "3 of 3",
+            "rate": "100%"
+          },
+          "ACCOUNT_NUMBER": {
+            "caught": "2 of 3",
+            "rate": "67%"
+          },
+          "PASSPORT": {
+            "caught": "0 of 2",
+            "rate": "0%"
+          },
+          "EMIRATES_ID": {
+            "caught": "1 of 2",
+            "rate": "50%"
+          },
+          "PHONE": {
+            "caught": "0 of 2",
+            "rate": "0%"
+          },
+          "DATE_OF_BIRTH": {
+            "caught": "0 of 2",
+            "rate": "0%"
+          },
+          "ADDRESS": {
+            "caught": "0 of 2",
+            "rate": "0%"
+          },
+          "IBAN_SPLIT": {
+            "caught": "0 of 1",
+            "rate": "0%"
+          },
+          "all": {
+            "caught": "15 of 28",
+            "rate": "54%"
+          }
+        }
+      },
+      "normal_text": {
+        "dev": {
+          "wrongly_masked": "0 of 12",
+          "rate": "0%"
+        },
+        "test": {
+          "wrongly_masked": "0 of 12",
+          "rate": "0%"
+        }
+      }
+    }
+  }
+}

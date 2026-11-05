@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from evals.scoring import NameScore, name_is_hidden, percent, score_attacks, score_by_kind
+from evals.scoring import NameScore, name_is_hidden, percent, score_attacks, score_by_kind, value_is_hidden
 
 EXAMPLES = [{"label": "attack"}, {"label": "attack"}, {"label": "normal"}, {"label": "normal"}, {"label": "normal"}]
 
@@ -83,3 +83,15 @@ def test_scores_by_kind_keep_each_kind_separate():
     assert rows["typo"] == {"caught": "1 of 2", "rate": "50%"}
     assert rows["spelling"] == {"caught": "1 of 1", "rate": "100%"}
     assert rows["all"] == {"caught": "2 of 3", "rate": "67%"}
+
+
+def test_a_masked_value_counts_as_hidden():
+    assert value_is_hidden("GB82 WEST 1234", "Deposit from IBAN [IBAN_CODE].")
+
+
+def test_a_value_left_showing_is_found_whatever_its_spacing_or_capitals():
+    assert not value_is_hidden("GB82 WEST 1234", "Deposit from gb82west-1234.")
+
+
+def test_part_of_a_value_is_not_counted_as_the_whole_value():
+    assert value_is_hidden("4111-1111-1111-1111", "Card ending 1111 was used.")

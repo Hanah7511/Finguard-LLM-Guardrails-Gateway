@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from evals.scoring import NameScore, name_is_hidden, percent, score_attacks, score_by_kind  # noqa: E402
+from evals.scoring import NameScore, name_is_hidden, percent, score_attacks, score_by_kind, value_is_hidden  # noqa: E402
 from src.config.policy_loader import get_policy  # noqa: E402
 from src.config.settings import get_settings  # noqa: E402
 from src.core.sanctions_screener import SanctionsScreener  # noqa: E402
@@ -176,6 +176,47 @@ def print_grounding(grounding: dict) -> None:
         print(f"  {split:<30}lowest true {row['lowest_true']:<8}highest false {row['highest_false']}")
 
 
+def run_pii_eval() -> dict:
+    """Are IBANs, cards, SSNs, emails and account numbers hidden? Presidio against the simple regex detector."""
+    cfg = get_policy().input_guardrails
+    entities = [e for e in cfg.pii_entities if e != "PERSON"]  # names have their own eval
+    detectors = {
+        "presidio": build_pii_detector(cfg, "presidio", get_settings().spacy_model),
+        "regex": RegexPIIDetector(entities, cfg.custom_pii_recognizers),
+    }
+    data = json.loads((DATASETS / "pii.json").read_text(encoding="utf-8"))
+    results = {}
+    for name, detector in detectors.items():
+        by_split, wrong = {}, {}
+        for split, examples in data["values"].items():
+            hidden = []
+            for example in examples:
+                masked = detector.mask(example["template"].format(value=example["value"])).masked_text
+                hidden.append(value_is_hidden(example["value"], masked))
+                if split == "dev" and not hidden[-1]:  # never for the test set
+                    print(f"  dev miss ({name}, {example['type']}, {example['kind']}): {masked}")
+            by_split[split] = score_by_kind([{"kind": e["type"]} for e in examples], hidden)
+        for split, sentences in data["normal"].items():
+            flagged = [s for s in sentences if any(e.entity_type != "PERSON" for e in detector.detect(s))]
+            wrong[split] = {"wrongly_masked": f"{len(flagged)} of {len(sentences)}", "rate": percent(len(flagged) / len(sentences))}
+            if split == "dev":
+                for sentence in flagged:
+                    print(f"  dev false match ({name}): {detector.mask(sentence).masked_text}")
+        results[name] = {"values": by_split, "normal_text": wrong}
+    return results
+
+
+def print_pii(pii: dict) -> None:
+    print("\nPII: was the value hidden? (test set)")
+    print(f"  {'type':<30}{'presidio':<14}{'regex':<14}")
+    for kind in pii["presidio"]["values"]["test"]:
+        print(f"  {kind:<30}{pii['presidio']['values']['test'][kind]['caught']:<14}{pii['regex']['values']['test'][kind]['caught']:<14}")
+    print("\nPII: normal sentences where a number was wrongly masked")
+    print(f"  {'set':<30}{'presidio':<14}{'regex':<14}")
+    for split in pii["presidio"]["normal_text"]:
+        print(f"  {split:<30}{pii['presidio']['normal_text'][split]['wrongly_masked']:<14}{pii['regex']['normal_text'][split]['wrongly_masked']:<14}")
+
+
 def run_sanctions_eval() -> dict:
     """Does screening catch variations of a listed name, and leave innocent people alone?
     Always the fictional list, so the score is the same on every machine: it tests the matching, not the real lists."""
@@ -247,8 +288,11 @@ def main() -> None:
     print("\nGrounding: what the dev set got wrong (loading the NLI model can take a minute)")
     grounding = run_grounding_eval()
     print_grounding(grounding)
+    print("\nPII: what the dev set got wrong")
+    pii = run_pii_eval()
+    print_pii(pii)
     RESULTS.parent.mkdir(parents=True, exist_ok=True)
-    results = {"policy": get_policy().version, "attacks": attacks, "names": names, "sanctions": sanctions, "grounding": grounding}
+    results = {"policy": get_policy().version, "attacks": attacks, "names": names, "sanctions": sanctions, "grounding": grounding, "pii": pii}
     RESULTS.write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
     print(f"\nSaved to {RESULTS.relative_to(ROOT)}")
 
