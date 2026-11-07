@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -17,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from evals.scoring import NameScore, name_is_hidden, percent, score_attacks, score_by_kind, value_is_hidden  # noqa: E402
-from src.config.policy_loader import get_policy  # noqa: E402
+from src.config.policy_loader import get_policy, load_policy  # noqa: E402
 from src.config.settings import get_settings  # noqa: E402
 from src.core.sanctions_screener import SanctionsScreener  # noqa: E402
 from src.input_guardrails.pii.presidio_detector import build_pii_detector  # noqa: E402
@@ -179,9 +180,9 @@ def print_grounding(grounding: dict) -> None:
 def run_pii_eval() -> dict:
     """Are IBANs, cards, SSNs, emails and account numbers hidden? Presidio against the simple regex detector."""
     cfg = get_policy().input_guardrails
-    entities = [e for e in cfg.pii_entities if e != "PERSON"]  # names have their own eval
+    entities = [e for e in cfg.pii_entities if e not in ("PERSON", "ADDRESS")]  # regex cannot find these
     detectors = {
-        "presidio": build_pii_detector(cfg, "presidio", get_settings().spacy_model),
+        "active": build_pii_detector(cfg, "presidio", get_settings().spacy_model),
         "regex": RegexPIIDetector(entities, cfg.custom_pii_recognizers),
     }
     data = json.loads((DATASETS / "pii.json").read_text(encoding="utf-8"))
@@ -208,13 +209,38 @@ def run_pii_eval() -> dict:
 
 def print_pii(pii: dict) -> None:
     print("\nPII: was the value hidden? (test set)")
-    print(f"  {'type':<30}{'presidio':<14}{'regex':<14}")
-    for kind in pii["presidio"]["values"]["test"]:
-        print(f"  {kind:<30}{pii['presidio']['values']['test'][kind]['caught']:<14}{pii['regex']['values']['test'][kind]['caught']:<14}")
+    print(f"  {'type':<30}{'active':<14}{'regex':<14}")
+    for kind in pii["active"]["values"]["test"]:
+        print(f"  {kind:<30}{pii['active']['values']['test'][kind]['caught']:<14}{pii['regex']['values']['test'][kind]['caught']:<14}")
     print("\nPII: normal sentences where a number was wrongly masked")
-    print(f"  {'set':<30}{'presidio':<14}{'regex':<14}")
-    for split in pii["presidio"]["normal_text"]:
-        print(f"  {split:<30}{pii['presidio']['normal_text'][split]['wrongly_masked']:<14}{pii['regex']['normal_text'][split]['wrongly_masked']:<14}")
+    print(f"  {'set':<30}{'active':<14}{'regex':<14}")
+    for split in pii["active"]["normal_text"]:
+        print(f"  {split:<30}{pii['active']['normal_text'][split]['wrongly_masked']:<14}{pii['regex']['normal_text'][split]['wrongly_masked']:<14}")
+
+
+def run_speed_eval() -> dict:
+    """How long does masking take? The active policy against the last one without GLiNER."""
+    data = json.loads((DATASETS / "names.json").read_text(encoding="utf-8"))
+    sentences = [t.format(name="Clara Openfield") for t in data["templates"]] * 5
+    rows = {}
+    for label, cfg in (("v1.9.0, Presidio only", load_policy("1.9.0").input_guardrails), ("active policy", get_policy().input_guardrails)):
+        detector = build_pii_detector(cfg, "presidio", get_settings().spacy_model)
+        detector.mask(sentences[0])  # the first call loads the models, so it is not timed
+        times = []
+        for sentence in sentences:
+            start = time.perf_counter()
+            detector.mask(sentence)
+            times.append((time.perf_counter() - start) * 1000)
+        times.sort()
+        rows[label] = {"p50_ms": round(times[len(times) // 2]), "p95_ms": round(times[int(len(times) * 0.95)])}
+    return rows
+
+
+def print_speed(speed: dict) -> None:
+    print("\nSpeed: time to mask one short sentence")
+    print(f"  {'detector':<30}{'p50':<14}p95")
+    for label, row in speed.items():
+        print(f"  {label:<30}{str(row['p50_ms']) + ' ms':<14}{row['p95_ms']} ms")
 
 
 def run_sanctions_eval() -> dict:
@@ -291,8 +317,10 @@ def main() -> None:
     print("\nPII: what the dev set got wrong")
     pii = run_pii_eval()
     print_pii(pii)
+    speed = run_speed_eval()
+    print_speed(speed)
     RESULTS.parent.mkdir(parents=True, exist_ok=True)
-    results = {"policy": get_policy().version, "attacks": attacks, "names": names, "sanctions": sanctions, "grounding": grounding, "pii": pii}
+    results = {"policy": get_policy().version, "attacks": attacks, "names": names, "sanctions": sanctions, "grounding": grounding, "pii": pii, "speed": speed}
     RESULTS.write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
     print(f"\nSaved to {RESULTS.relative_to(ROOT)}")
 

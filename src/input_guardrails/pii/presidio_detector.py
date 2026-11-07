@@ -51,8 +51,23 @@ class PresidioPIIDetector(PIIDetector):
         return [PIIEntity(r.entity_type, r.start, r.end, r.score) for r in results]
 
 
+def _build_hybrid(policy: InputGuardrailsPolicy, spacy_model: str) -> PIIDetector:
+    """Presidio's rules for numbers, GLiNER for what the policy asks it to find. Presidio stops
+    looking for those types itself: its name model is the weaker one, so running both only adds mistakes."""
+    from src.input_guardrails.pii.gliner_detector import GlinerPIIDetector, HybridPIIDetector
+
+    cfg = policy.gliner
+    rules = [e for e in policy.pii_entities if e not in set(cfg.labels.values())]
+    return HybridPIIDetector([
+        PresidioPIIDetector(rules, policy.custom_pii_recognizers, policy.pii_score_threshold, spacy_model),
+        GlinerPIIDetector(cfg.model_id, cfg.threshold, cfg.labels),
+    ])
+
+
 def build_pii_detector(policy: InputGuardrailsPolicy, backend: str = "auto", spacy_model: str = "en_core_web_sm") -> PIIDetector:
     if backend in ("auto", "presidio"):
+        if policy.gliner.enabled:  # no fallback: without the models, names would quietly stay visible
+            return _build_hybrid(policy, spacy_model)
         try:
             return PresidioPIIDetector(
                 policy.pii_entities,

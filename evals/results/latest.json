@@ -1,5 +1,5 @@
 {
-  "policy": "1.9.0",
+  "policy": "1.10.0",
   "attacks": {
     "AML dev": {
       "attacks_caught": "0 of 9",
@@ -30,68 +30,68 @@
     "groups": {
       "English": {
         "dev": {
-          "names_hidden": "14 of 15",
-          "recall": "93%"
+          "names_hidden": "15 of 15",
+          "recall": "100%"
         },
         "test": {
-          "names_hidden": "13 of 15",
-          "recall": "87%"
+          "names_hidden": "15 of 15",
+          "recall": "100%"
         }
       },
       "Arabic, in English letters": {
         "dev": {
-          "names_hidden": "14 of 15",
-          "recall": "93%"
+          "names_hidden": "15 of 15",
+          "recall": "100%"
         },
         "test": {
-          "names_hidden": "14 of 15",
-          "recall": "93%"
+          "names_hidden": "15 of 15",
+          "recall": "100%"
         }
       },
       "South Asian": {
         "dev": {
-          "names_hidden": "7 of 15",
-          "recall": "47%"
+          "names_hidden": "15 of 15",
+          "recall": "100%"
         },
         "test": {
-          "names_hidden": "10 of 15",
-          "recall": "67%"
+          "names_hidden": "15 of 15",
+          "recall": "100%"
         }
       },
       "East Asian": {
         "dev": {
-          "names_hidden": "14 of 15",
-          "recall": "93%"
+          "names_hidden": "15 of 15",
+          "recall": "100%"
         },
         "test": {
-          "names_hidden": "11 of 15",
-          "recall": "73%"
+          "names_hidden": "15 of 15",
+          "recall": "100%"
         }
       },
       "African": {
         "dev": {
-          "names_hidden": "9 of 15",
-          "recall": "60%"
+          "names_hidden": "15 of 15",
+          "recall": "100%"
         },
         "test": {
-          "names_hidden": "8 of 15",
-          "recall": "53%"
+          "names_hidden": "15 of 15",
+          "recall": "100%"
         }
       },
       "Hispanic": {
         "dev": {
-          "names_hidden": "10 of 15",
-          "recall": "67%"
+          "names_hidden": "15 of 15",
+          "recall": "100%"
         },
         "test": {
-          "names_hidden": "10 of 15",
-          "recall": "67%"
+          "names_hidden": "15 of 15",
+          "recall": "100%"
         }
       },
       "Mohammed spellings": {
         "dev": {
-          "names_hidden": "5 of 6",
-          "recall": "83%"
+          "names_hidden": "6 of 6",
+          "recall": "100%"
         },
         "test": {
           "names_hidden": "6 of 6",
@@ -100,19 +100,19 @@
       },
       "Arabic script": {
         "dev": {
-          "names_hidden": "0 of 10",
-          "recall": "0%"
+          "names_hidden": "10 of 10",
+          "recall": "100%"
         },
         "test": {
-          "names_hidden": "1 of 10",
-          "recall": "10%"
+          "names_hidden": "10 of 10",
+          "recall": "100%"
         }
       }
     },
     "normal_text": {
       "dev": {
-        "wrongly_masked": "1 of 20",
-        "rate": "5%"
+        "wrongly_masked": "2 of 20",
+        "rate": "10%"
       },
       "test": {
         "wrongly_masked": "1 of 20",
@@ -280,7 +280,7 @@
     }
   },
   "pii": {
-    "presidio": {
+    "active": {
       "values": {
         "dev": {
           "IBAN_CODE": {
@@ -320,16 +320,16 @@
             "rate": "100%"
           },
           "ADDRESS": {
-            "caught": "0 of 2",
-            "rate": "0%"
+            "caught": "2 of 2",
+            "rate": "100%"
           },
           "IBAN_SPLIT": {
             "caught": "0 of 1",
             "rate": "0%"
           },
           "all": {
-            "caught": "25 of 28",
-            "rate": "89%"
+            "caught": "27 of 28",
+            "rate": "96%"
           }
         },
         "test": {
@@ -370,16 +370,16 @@
             "rate": "100%"
           },
           "ADDRESS": {
-            "caught": "1 of 2",
-            "rate": "50%"
+            "caught": "2 of 2",
+            "rate": "100%"
           },
           "IBAN_SPLIT": {
             "caught": "0 of 1",
             "rate": "0%"
           },
           "all": {
-            "caught": "26 of 28",
-            "rate": "93%"
+            "caught": "27 of 28",
+            "rate": "96%"
           }
         }
       },
@@ -507,6 +507,16 @@
           "rate": "0%"
         }
       }
+    }
+  },
+  "speed": {
+    "v1.9.0, Presidio only": {
+      "p50_ms": 5,
+      "p95_ms": 6
+    },
+    "active policy": {
+      "p50_ms": 237,
+      "p95_ms": 322
     }
   }
 }

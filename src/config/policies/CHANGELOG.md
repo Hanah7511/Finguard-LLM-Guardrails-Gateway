@@ -3,6 +3,14 @@
 Every policy change gets a new versioned file, an entry here and a git commit.
 Old versions stay in place: reports record the version they were validated under.
 
+## 1.10.0 — 2026-11-06
+Approved by: compliance-team
+
+- Added `gliner`: a small model now finds names and addresses, and Presidio's rules still handle numbers.
+- Added `ADDRESS` to `pii_entities`.
+- Masking is slower (about 5 ms → 240 ms per sentence) and uses more memory (about 1.6 GB per process instead of about 370 MB).
+- FinGuard refuses to run without both models rather than leave names visible.
+
 ## 1.9.0 — 2026-11-06
 Approved by: compliance-team
 

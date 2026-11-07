@@ -57,6 +57,14 @@ class LlamaGuardConfig(StrictModel):
     on_error: Literal["block", "allow"] = "block"
 
 
+class GlinerPolicy(StrictModel):
+    # A small model for names and addresses, with Presidio's rules still handling numbers. Off before v1.10.0.
+    enabled: bool = False
+    model_id: str = "urchade/gliner_multi_pii-v1"
+    threshold: float = Field(default=0.9, ge=0.0, le=1.0)
+    labels: dict[str, str] = Field(default_factory=dict)  # what we ask the model for -> FinGuard's entity type
+
+
 class InputGuardrailsPolicy(StrictModel):
     require_consent: bool = True
     max_query_chars: int = Field(default=4000, gt=0)
@@ -68,6 +76,7 @@ class InputGuardrailsPolicy(StrictModel):
     party_masking: bool = False
     custom_pii_recognizers: list[CustomPIIRecognizer] = Field(default_factory=list)
     llama_guard: LlamaGuardConfig = LlamaGuardConfig()
+    gliner: GlinerPolicy = Field(default_factory=GlinerPolicy)
 
 
 class ToolCallGuardrailsPolicy(StrictModel):
