@@ -19,6 +19,7 @@ class GroundingResult:
     contradiction_score: float
     neutral_score: float
     method: str
+    failed_fact_checks: tuple[str, ...] = ()  # kinds of figure the source does not contain
 
     def to_dict(self) -> dict:
         data = asdict(self)

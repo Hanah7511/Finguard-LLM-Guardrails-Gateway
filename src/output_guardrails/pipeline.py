@@ -1,7 +1,7 @@
 """Runs output checks cheapest-first: schema -> PII leak -> grounding -> confidence."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Optional, Union
 
@@ -10,6 +10,7 @@ from src.input_guardrails.pii.base import PIIDetector
 from src.monitoring.telemetry import Decision, GuardrailDecision, Stopwatch
 from src.output_guardrails.confidence_gate import ConfidenceGate
 from src.output_guardrails.grounding.base import Grounder, GroundingResult, GroundingVerdict
+from src.output_guardrails.grounding.fact_check import unsupported_facts
 from src.output_guardrails.schema_validator import ComplianceResponse, SchemaValidator
 from src.vector_store.retriever import RegulationRetriever
 
@@ -44,6 +45,7 @@ class OutputGuardrailPipeline:
         self.retriever = retriever
         self.pii_detector = pii_detector
         self.confidence = ConfidenceGate(policy.output_guardrails.minimum_confidence, self._version)
+        self._exact_fact_check = policy.output_guardrails.exact_fact_check
 
     def run(self, raw_output: Union[str, dict]) -> OutputPipelineResult:
         decisions: list[GuardrailDecision] = []
@@ -108,6 +110,10 @@ class OutputGuardrailPipeline:
     ) -> tuple[GuardrailDecision, GroundingResult]:
         sw = Stopwatch()
         result = self.grounder.score(source, claim)
+        if self._exact_fact_check and result.verdict is GroundingVerdict.GROUNDED:
+            failed = unsupported_facts(source, claim)
+            if failed:  # the model agreed, but a figure is not in the law: a person decides
+                result = replace(result, verdict=GroundingVerdict.UNGROUNDED, failed_fact_checks=failed)
         mapping = {
             GroundingVerdict.GROUNDED: Decision.PASS,
             GroundingVerdict.HALLUCINATED: Decision.BLOCK,
@@ -118,7 +124,8 @@ class OutputGuardrailPipeline:
             decision=mapping[result.verdict],
             reasoning_trace=(
                 f"verdict={result.verdict.value}, entailment={result.entailment_score:.2f}, "
-                f"contradiction={result.contradiction_score:.2f}, source={source_id}"
+                f"contradiction={result.contradiction_score:.2f}, source={source_id}, "
+                f"failed_fact_checks={','.join(result.failed_fact_checks) or 'none'}"
             ),
             policy_version=self._version,
             latency_ms=sw.ms(),

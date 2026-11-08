@@ -118,6 +118,8 @@ class OutputGuardrailsPolicy(StrictModel):
     contradiction_threshold: float = Field(ge=0.0, le=1.0)
     cosine_threshold: float = Field(default=0.75, ge=0.0, le=1.0)
     max_retries: int = Field(default=2, ge=0, le=5)
+    # Every amount, period and "from the date of ..." in a claim must also be in the source. Off before v1.12.0.
+    exact_fact_check: bool = False
 
 
 

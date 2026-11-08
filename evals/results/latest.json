@@ -1,5 +1,5 @@
 {
-  "policy": "1.11.0",
+  "policy": "1.12.0",
   "attacks": {
     "AML dev": {
       "attacks_caught": "0 of 9",
@@ -237,12 +237,12 @@
           "rate": "100%"
         },
         "almost right": {
-          "caught": "3 of 5",
-          "rate": "60%"
+          "caught": "5 of 5",
+          "rate": "100%"
         },
         "all": {
-          "caught": "16 of 18",
-          "rate": "89%"
+          "caught": "18 of 18",
+          "rate": "100%"
         }
       },
       "test": {
@@ -267,12 +267,12 @@
           "rate": "100%"
         },
         "almost right": {
-          "caught": "3 of 5",
-          "rate": "60%"
+          "caught": "4 of 5",
+          "rate": "80%"
         },
         "all": {
-          "caught": "16 of 18",
-          "rate": "89%"
+          "caught": "17 of 18",
+          "rate": "94%"
         }
       }
     },
@@ -519,12 +519,12 @@
   },
   "speed": {
     "v1.9.0, Presidio only": {
-      "p50_ms": 31,
-      "p95_ms": 35
+      "p50_ms": 6,
+      "p95_ms": 7
     },
     "active policy": {
-      "p50_ms": 832,
-      "p95_ms": 1361
+      "p50_ms": 383,
+      "p95_ms": 616
     }
   }
 }

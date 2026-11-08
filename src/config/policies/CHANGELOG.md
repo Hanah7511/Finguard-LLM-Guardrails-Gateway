@@ -3,6 +3,12 @@
 Every policy change gets a new versioned file, an entry here and a git commit.
 Old versions stay in place: reports record the version they were validated under.
 
+## 1.12.0 — 2026-11-08
+Approved by: compliance-team
+
+- Added `exact_fact_check`: every amount, period and "from the date of ..." in a claim must also be in the cited law.
+- A claim the model accepts but this check rejects goes to a person.
+
 ## 1.11.0 — 2026-11-07
 Approved by: compliance-team
 
