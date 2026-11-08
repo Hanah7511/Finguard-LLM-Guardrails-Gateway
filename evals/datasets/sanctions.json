@@ -19,7 +19,10 @@
       {"name": "V. Sampleov", "kind": "initial"},
       {"name": "K Testani", "kind": "initial"},
       {"name": "خالد تستاني", "kind": "Arabic script"},
-      {"name": "أحمد فكري", "kind": "Arabic script"}
+      {"name": "أحمد فكري", "kind": "Arabic script"},
+      {"name": "محمد الاكزامبله", "kind": "Arabic script"},
+      {"name": "فكتور سامبلوف", "kind": "Arabic script"},
+      {"name": "خالد تستاتي", "kind": "Arabic script, typo"}
     ],
     "test": [
       {"name": "Mohammad Al Exampleh", "kind": "spelling"},
@@ -39,19 +42,27 @@
       {"name": "J. Demonstrova", "kind": "initial"},
       {"name": "A Fakeri", "kind": "initial"},
       {"name": "محمد الإكسامبله", "kind": "Arabic script"},
-      {"name": "فيكتور سامبليوف", "kind": "Arabic script"}
+      {"name": "فيكتور سامبليوف", "kind": "Arabic script"},
+      {"name": "خالد تستانى", "kind": "Arabic script"},
+      {"name": "أحمد فاكري", "kind": "Arabic script"},
+      {"name": "جانا ديمونستروفا", "kind": "Arabic script"},
+      {"name": "فيكتور سامبيوف", "kind": "Arabic script, typo"}
     ]
   },
   "innocent": {
     "dev": [
       "Viktor Samuelsson", "Jana Demidova", "Khalid Tesfaye", "Mohammed Al Rashidi", "Ahmed Fakhrani",
       "Clara Openfield", "Omar Brightwater", "Northern Wind Farms LLC", "Testa Rossa Restaurant", "Fiction House Holdings",
-      "Victor Sampson", "Ahmed Mansoor", "Khaled Tamimi", "Mohammed Ibrahim", "Sample Trading Ltd"
+      "Victor Sampson", "Ahmed Mansoor", "Khaled Tamimi", "Mohammed Ibrahim", "Sample Trading Ltd",
+      "أحمد فخراني", "خالد تسفاي", "محمد الراشدي", "خالد التميمي", "أحمد منصور",
+      "فيكتور سامويلسون"
     ],
     "test": [
       "Viktor Semenov", "Jana Novakova", "Khalid Tahir", "Mohammed Al Hashimi", "Ahmed Faris",
       "Grace Holloway", "Rahul Deshmukh", "Northwind Bakery", "Testa Family Foods", "Fictiva Trading LLC",
-      "Victor Sanders", "Ahmed Rahman", "Khaled Tariq", "Mohamed Elsayed", "Example Logistics Ltd"
+      "Victor Sanders", "Ahmed Rahman", "Khaled Tariq", "Mohamed Elsayed", "Example Logistics Ltd",
+      "خالد طاهر", "محمد الهاشمي", "أحمد فارس", "أحمد رحمن", "خالد طارق",
+      "فيكتور سيمينوف"
     ]
   }
 }

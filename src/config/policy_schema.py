@@ -160,6 +160,16 @@ class OwnershipRulePolicy(StrictModel):
     max_depth: int = Field(default=5, ge=1, le=10)
 
 
+class ArabicScriptPolicy(StrictModel):
+    # Screen names written in Arabic script. Off before v1.11.0: such names matched nothing.
+    enabled: bool = False
+    # How close an Arabic name must be to the list's own Arabic name. Stricter than the
+    # English-letter threshold: Arabic leaves out short vowels, so one letter counts for more.
+    match_threshold: float = Field(default=0.9, ge=0.5, le=1.0)
+    # How close two consonant keys must be (Arabic name vs English-letter name). 1.0 = the same key.
+    key_threshold: float = Field(default=1.0, ge=0.5, le=1.0)
+
+
 class SanctionsScreeningPolicy(StrictModel):
     lists: list[str] = Field(min_length=1)
     fuzzy_match_threshold: float = Field(default=0.85, ge=0.5, le=1.0)
@@ -174,6 +184,7 @@ class SanctionsScreeningPolicy(StrictModel):
     # Tool 4 takes a token such as [PERSON_1] and never shows the agent the name. Off before v1.6.0.
     accept_tokens: bool = False
     ownership_rule: OwnershipRulePolicy = Field(default_factory=OwnershipRulePolicy)
+    arabic_script: ArabicScriptPolicy = Field(default_factory=ArabicScriptPolicy)
 
 
 class FinalizeCheckPolicy(StrictModel):

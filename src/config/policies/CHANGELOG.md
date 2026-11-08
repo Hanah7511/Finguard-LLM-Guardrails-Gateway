@@ -3,6 +3,13 @@
 Every policy change gets a new versioned file, an entry here and a git commit.
 Old versions stay in place: reports record the version they were validated under.
 
+## 1.11.0 — 2026-11-07
+Approved by: compliance-team
+
+- Added `sanctions_screening.arabic_script`: names written in Arabic script are now screened.
+- They are compared with the list's own Arabic names, and by consonant key with names in English letters.
+- A consonant-key match is never an exact match, so it goes to review unless an ID number confirms it.
+
 ## 1.10.0 — 2026-11-06
 Approved by: compliance-team
 

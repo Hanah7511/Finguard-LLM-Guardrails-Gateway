@@ -15,6 +15,8 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
+from src.core.arabic_names import consonant_key, has_arabic, normalize_arabic
+
 if TYPE_CHECKING:
     from src.config.policy_schema import SanctionsScreeningPolicy
 
@@ -72,6 +74,7 @@ class SanctionsEntry:
     dates_of_birth: tuple[str, ...] = ()
     nationalities: tuple[str, ...] = ()
     id_numbers: tuple[tuple[str, str, str], ...] = ()  # (type, number, issuing country)
+    original_script: tuple[str, ...] = ()  # the name as the list writes it in its own script, e.g. Arabic
 
 
 @dataclass
@@ -81,6 +84,9 @@ class SanctionsMatch:
     list_name: str
     program: str
     score: float
+    # "name" (English letters), "arabic_script" (the list's Arabic name) or "consonant_key"
+    # (an Arabic-script name compared with an English-letter one: a person must check it).
+    matched_by: str = "name"
     status: str = ""  # with identifiers on: "confirmed", "possible" or "ruled_out"
     reason: str = ""
 
@@ -96,6 +102,24 @@ class SanctionsResult:
     recommendation: str = "clear"
 
 
+class _NameIndex:
+    """Names looked up by shared letter-triples, so only likely names get the slow comparison."""
+
+    def __init__(self, names: list[tuple[SanctionsEntry, str]]) -> None:
+        self.names = names
+        self._by_trigram: dict[str, list[int]] = defaultdict(list)
+        for i, (_, name) in enumerate(names):
+            for gram in _trigrams(name):
+                self._by_trigram[gram].append(i)
+
+    def candidates(self, query: str) -> list[tuple[SanctionsEntry, str]]:
+        if not query:
+            return []
+        grams = _trigrams(query)
+        shared = Counter(i for gram in grams for i in self._by_trigram.get(gram, ()))
+        return [self.names[i] for i, n in shared.items() if n / len(grams) >= _MIN_TRIGRAM_SHARE]
+
+
 class SanctionsScreener:
     def __init__(
         self,
@@ -107,6 +131,9 @@ class SanctionsScreener:
         use_identifiers: bool = False,
         monitored_jurisdictions: tuple[str, ...] = (),
         clear_requires_verified: bool = False,
+        arabic_script: bool = False,
+        key_threshold: float = 1.0,
+        arabic_threshold: float = 0.9,
     ) -> None:
         self.source = source  # which list file was loaded, e.g. "official" or "test"
         self._use_identifiers = use_identifiers
@@ -115,17 +142,17 @@ class SanctionsScreener:
         self._threshold = fuzzy_threshold
         self._jurisdictions = {j.strip().lower() for j in high_risk_jurisdictions}
         self._monitored = {j.strip().lower() for j in monitored_jurisdictions}
-        self._index = [
-            (entry, normalize_name(n))
-            for entry in entries
-            if entry.list_name in self._lists
-            for n in (entry.name, *entry.aliases)
-            if normalize_name(n)
-        ]
-        self._by_trigram: dict[str, list[int]] = defaultdict(list)
-        for i, (_, candidate) in enumerate(self._index):
-            for gram in _trigrams(candidate):
-                self._by_trigram[gram].append(i)
+        screened = [e for e in entries if e.list_name in self._lists]
+        latin = [(e, normalize_name(n)) for e in screened for n in (e.name, *e.aliases) if normalize_name(n)]
+        self._latin = _NameIndex(latin)
+        self._arabic_script = arabic_script
+        self._key_threshold = key_threshold
+        self._arabic_threshold = arabic_threshold
+        if arabic_script:
+            self._arabic = _NameIndex(
+                [(e, normalize_arabic(n)) for e in screened for n in e.original_script if normalize_arabic(n)]
+            )
+            self._keys = _NameIndex([(e, consonant_key(n)) for e, n in latin if consonant_key(n)])
 
     @classmethod
     def from_json(
@@ -138,11 +165,13 @@ class SanctionsScreener:
         use_identifiers: bool = False,
         monitored: tuple[str, ...] = (),
         clear_requires_verified: bool = False,
+        arabic_script: bool = False,
+        key_threshold: float = 1.0,
+        arabic_threshold: float = 0.9,
     ) -> "SanctionsScreener":
         raw = json.loads(Path(path).read_text(encoding="utf-8"))
-        # Weak aliases and original-script (e.g. Arabic) names are kept in the file
-        # but not screened: weak aliases cause false hits, and matching other
-        # scripts needs transliteration.
+        # Weak aliases are kept in the file but never screened: they cause false hits.
+        # Arabic-script names are screened only when the policy turns arabic_script on.
         entries = [
             SanctionsEntry(
                 name=e["name"],
@@ -157,10 +186,14 @@ class SanctionsScreener:
                 id_numbers=tuple(
                     (i.get("type", ""), i.get("number", ""), i.get("country", "")) for i in e.get("id_numbers", [])
                 ),
+                original_script=tuple(n for n in e.get("names_original_script", []) if n),
             )
             for e in raw["entries"]
         ]
-        return cls(entries, lists, fuzzy_threshold, high_risk, source, use_identifiers, tuple(monitored), clear_requires_verified)
+        return cls(
+            entries, lists, fuzzy_threshold, high_risk, source, use_identifiers, tuple(monitored),
+            clear_requires_verified, arabic_script, key_threshold, arabic_threshold,
+        )
 
     @classmethod
     def from_policy(cls, path: Path, cfg: "SanctionsScreeningPolicy", source: str = "") -> "SanctionsScreener":
@@ -168,15 +201,29 @@ class SanctionsScreener:
         return cls.from_json(
             path, cfg.lists, cfg.fuzzy_match_threshold, cfg.high_risk_jurisdictions, source,
             cfg.use_identifiers, tuple(cfg.increased_monitoring_jurisdictions), cfg.clear_requires_verified_identifiers,
+            cfg.arabic_script.enabled, cfg.arabic_script.key_threshold, cfg.arabic_script.match_threshold,
         )
 
-    def _candidates(self, query: str) -> list[tuple[SanctionsEntry, str]]:
-        """Index entries sharing enough letter-triples with the query to be worth comparing."""
-        grams = _trigrams(query)
-        if not grams:
-            return []
-        shared = Counter(i for gram in grams for i in self._by_trigram.get(gram, ()))
-        return [self._index[i] for i, n in shared.items() if n / len(grams) >= _MIN_TRIGRAM_SHARE]
+    def _scored(self, entity_name: str) -> list[tuple[SanctionsEntry, str, float, str]]:
+        """Every (entry, listed name, score, matched_by) worth comparing with the screened name."""
+        query = normalize_name(entity_name)
+        found = [
+            (entry, candidate, 1.0 if query == candidate else name_similarity(query, candidate), "name")
+            for entry, candidate in self._latin.candidates(query)
+        ]
+        if self._arabic_script and has_arabic(entity_name):
+            arabic = normalize_arabic(entity_name)
+            for entry, candidate in self._arabic.candidates(arabic):
+                score = 1.0 if arabic == candidate else name_similarity(arabic, candidate)
+                if score >= self._arabic_threshold:  # stricter: without vowels, one letter is a bigger share
+                    found.append((entry, candidate, score, "arabic_script"))
+            key = consonant_key(arabic)
+            for entry, candidate in self._keys.candidates(key):
+                similarity = 1.0 if key == candidate else name_similarity(key, candidate)
+                if similarity >= self._key_threshold:
+                    # Never an exact match: the key drops vowels, so different names can share one.
+                    found.append((entry, candidate, min(similarity, 0.99), "consonant_key"))
+        return found
 
     @staticmethod
     def _check_identifiers(
@@ -218,17 +265,15 @@ class SanctionsScreener:
     ) -> SanctionsResult:
         """dob is "YYYY-MM-DD" (or "YYYY" if only the year is known). identifiers_verified
         means the DOB / ID were checked against an official document (KYC)."""
-        query = normalize_name(entity_name)
         best: dict[tuple[str, str], tuple[SanctionsEntry, SanctionsMatch]] = {}
         best_score = 0.0
-        for entry, candidate in self._candidates(query):
-            score = 1.0 if query == candidate else name_similarity(query, candidate)
+        for entry, candidate, score, matched_by in self._scored(entity_name):
             best_score = max(best_score, score)
             if score < self._threshold:
                 continue
             key = (entry.name, entry.list_name)
             if key not in best or score > best[key][1].score:
-                match = SanctionsMatch(entry.name, candidate, entry.list_name, entry.program, round(score, 4))
+                match = SanctionsMatch(entry.name, candidate, entry.list_name, entry.program, round(score, 4), matched_by)
                 best[key] = (entry, match)
 
         ranked = sorted(best.values(), key=lambda pair: -pair[1].score)

@@ -470,7 +470,7 @@ class Orchestrator:
             "checked_lists": r.checked_lists,
             "list_source": self.sanctions.source,
             "matches": [
-                {"listed_name": None if from_tokens else m.name, "list": m.list_name, "program": m.program, "score": m.score, "status": m.status, "reason": m.reason,}
+                {"listed_name": None if from_tokens else m.name, "list": m.list_name, "program": m.program, "score": m.score, "matched_by": m.matched_by, "status": m.status, "reason": m.reason}
                 for m in r.matches
             ],
             "country_risk": r.country_risk,
