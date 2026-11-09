@@ -26,6 +26,7 @@ async def lifespan(app: FastAPI):
     orch = get_orchestrator()
     orch.require_app_key_is_set()
     orch.require_analyst_key_is_set()
+    orch.pii_detector.load()  # now, so the first user does not wait and a missing model stops the door here
     yield
 
 

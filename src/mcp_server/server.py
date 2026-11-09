@@ -192,10 +192,12 @@ def create_server(orchestrator: Optional[Orchestrator] = None) -> MCPServer:
 
 def main() -> None:
     settings = get_settings()
-    server = create_server()
+    orch = get_orchestrator()
+    server = create_server(orch)
     if settings.mcp_transport == "stdio":
-        server.run("stdio")
+        server.run("stdio")  # not loaded here: a client that starts this door gives up if it is slow to answer
     else:
+        orch.pii_detector.load()
         server.run(settings.mcp_transport, host=settings.mcp_host, port=settings.mcp_port)
 
 

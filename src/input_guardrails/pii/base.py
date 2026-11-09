@@ -40,6 +40,9 @@ class PIIDetector(ABC):
     def detect(self, text: str) -> list[PIIEntity]:
         """Return all PII spans in ``text`` (may overlap)."""
 
+    def load(self) -> None:
+        """Load any model now instead of on first use. A detector with no model has nothing to do."""
+
     def mask(self, text: str, token_for: Optional[Callable[[str, str], str]] = None) -> PIIResult:
         """Replace each detected span with ``[ENTITY_TYPE]``, or with ``token_for(type, value)`` if given."""
         masked_spans = [m.span() for m in _ALREADY_MASKED.finditer(text)]

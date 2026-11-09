@@ -6,6 +6,7 @@ pieces: otherwise a name further in would silently stay visible. The model loads
 """
 from __future__ import annotations
 
+import threading
 from typing import Iterable, Iterator, Mapping
 
 from src.input_guardrails.pii.base import PIIDetector, PIIEntity
@@ -45,10 +46,15 @@ class GlinerPIIDetector(PIIDetector):
         self._threshold = threshold
         self._labels = dict(labels)  # what we ask the model for -> FinGuard's entity type
         self._model = None
+        self._load_lock = threading.Lock()
+
+    def load(self) -> None:
+        with self._load_lock:              # only one request can load it
+            if self._model is None:
+                self._model = _load_model(self._model_id)
 
     def detect(self, text: str) -> list[PIIEntity]:
-        if self._model is None:
-            self._model = _load_model(self._model_id)
+        self.load()
         found: dict[tuple[str, int, int], PIIEntity] = {}
         for offset, piece in windows(text):
             for span in self._model.predict_entities(piece, list(self._labels), threshold=self._threshold):
@@ -64,6 +70,10 @@ class HybridPIIDetector(PIIDetector):
 
     def __init__(self, detectors: Iterable[PIIDetector]) -> None:
         self._detectors = list(detectors)
+
+    def load(self) -> None:
+        for detector in self._detectors:
+            detector.load()
 
     def detect(self, text: str) -> list[PIIEntity]:
         return [entity for detector in self._detectors for entity in detector.detect(text)]
