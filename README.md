@@ -203,7 +203,11 @@ finguard-llm-guardrails-gateway/
 │   │       ├── v1.5.0_guardrail_policy.yaml
 │   │       ├── v1.6.0_guardrail_policy.yaml
 │   │       ├── v1.7.0_guardrail_policy.yaml
-│   │       ├── v1.8.0_guardrail_policy.yaml   # active
+│   │       ├── v1.8.0_guardrail_policy.yaml
+│   │       ├── v1.9.0_guardrail_policy.yaml
+│   │       ├── v1.10.0_guardrail_policy.yaml
+│   │       ├── v1.11.0_guardrail_policy.yaml
+│   │       ├── v1.12.0_guardrail_policy.yaml  # active
 │   │       └── CHANGELOG.md
 │   ├── core/
 │   │   ├── orchestrator.py          # THE BRAIN — one handle_* per job
@@ -350,7 +354,7 @@ AGENT_KEY_COMPLIANCE=cmp-secret-...
 AGENT_KEY_SUMMARIZATION=sum-secret-...
 
 # Active policy version
-ACTIVE_POLICY_VERSION=1.8.0
+ACTIVE_POLICY_VERSION=1.12.0
 ```
 
 ### 3. Run FastAPI (standalone)
@@ -386,15 +390,16 @@ The fake agent plays finintel's investigation, compliance and summarization agen
 
 ### 5. Docker
 
-Docker Desktop must be running. `docker compose up -d --build` starts PostgreSQL, runs the table migration once, then starts both doors:
+Docker Desktop must be running. Start one door at a time unless the machine has plenty of memory (see below). Starting a door also starts PostgreSQL and runs the table migration once:
 
 ```bash
-docker compose up -d --build       # the first build downloads PyTorch and takes several minutes
-docker compose ps                  # both should become (healthy)
-python scripts/check_doors.py      # calls the REST door (port 8000) and the MCP door (port 8001)
-python scripts/check_restart.py    # proves both doors share a case and that it survives a restart
-docker compose down                # stops them; models and audit logs stay in Docker volumes
+docker compose up -d --build mcp   # one door; the first start also downloads the models
+docker compose ps                  # wait for (healthy), which can take several minutes
+docker compose stop mcp            # then `docker compose up -d api` to switch doors
+docker compose stop                # stops everything; data and models stay
 ```
+
+**Memory.** One door with its models uses about 2 GB. Both together did not fit in 3.7 GB of Docker memory: the second door crashed while loading. A machine running both needs more (about 6 GB is an estimate, not tested). `scripts/check_doors.py` and `scripts/check_restart.py` call both doors, so they need that too.
 
 | What | How it is handled |
 |------|-------------------|
@@ -404,7 +409,7 @@ docker compose down                # stops them; models and audit logs stay in D
 | Database | No outside port. The doors log in as a limited user that can only read and add rows |
 | Audit log and case history | The database refuses edits and deletes |
 | User | Runs as a non-root user |
-| Models | Downloaded when first needed, kept in a Docker volume |
+| Models | Downloaded on first start, loaded when a door starts, kept in a Docker volume |
 
 **Limits for now:**
 
@@ -421,6 +426,27 @@ docker compose down                # stops them; models and audit logs stay in D
 ---
 
 ## Metrics & Evaluation
+
+### Measured results (policy v1.12.0, test sets)
+
+Run with `python evals/run_evals.py`. Results are saved in `evals/results/latest.json`. Tuning used the dev sets only.
+
+| Check | Result | Notes |
+|---|---|---|
+| Attacks caught, AML test set | **0 of 6** | Phrase rules only, no trained classifier yet |
+| Attacks caught, deepset | **0 of 60** | Includes German text; the rules are in English. 0 of 56 normal prompts blocked |
+| Attacks caught, Gandalf | **19 of 112 (17%)** | |
+| Names hidden, 8 groups including Arabic script | 106 of 106 | Small hand-written set |
+| Ordinary sentences with a word masked as a name | 1 of 20 | |
+| Personal data hidden | 27 of 28 | Missed: an IBAN split across lines |
+| Normal sentences with a number wrongly masked | 2 of 12 | Hiding too much is the safer mistake |
+| Sanctions name variations caught | 17 of 22 (77%) | Missed: missing name parts (0 of 3), initials (1 of 2), Arabic typo (0 of 1) |
+| Innocent names wrongly flagged | 1 of 21 | Small fictional list |
+| True legal claims accepted | 8 of 9 | |
+| False legal claims refused | 17 of 18 (94%) | |
+| Masking speed, p50 / p95 | 383 / 616 ms | Rules only: 6 / 7 ms. Laptop CPU, varies with load |
+
+**Read these with care.** The sets are small, so one case moves a score a lot. Attack detection is the weakest part. Not measured yet: false alarms on the real sanctions lists, confidence calibration, escalation rate and tool-call accuracy.
 
 ### Level 1 — Per-layer metrics
 
@@ -444,7 +470,7 @@ docker compose down                # stops them; models and audit logs stay in D
 | Sanctions match recall | `sanctions_screen()` | Name variation testing: Mohammed / Muhammad / Mohamed |
 | Task success rate | Full MCP flow | Scripted fake-agent now; real finintel later |
 | Policy version coverage | All decisions | Must be 100% — automatic test, not a score |
-| Policy v1.0.0 → v1.8.0 | Full eval suite | Run on every version; compare results |
+| Policy v1.0.0 → v1.12.0 | Full eval suite | Run on every version; compare results |
 | End-to-end agent run | `scripts/fake_agent.py` (12 alerts, `--rogue`) | Task success: every investigation reaches the expected outcome; rogue calls refused |
 | Sample alert regression | `data/sample_alerts/alerts.json` | `python scripts/run_sample_alerts.py` — must stay 12/12 unless a policy change explains the difference |
 
@@ -481,7 +507,7 @@ docker compose down                # stops them; models and audit logs stay in D
 **In active development.** Part of the Financial Risk Intelligence Platform portfolio.
 
 - [x] Architecture + design (dual-door, 6 guardrail layers, 8 MCP tools)
-- [x] Versioned YAML policy engine (v1.0.0 – v1.7.0, v1.8.0 active)
+- [x] Versioned YAML policy engine (v1.0.0 – v1.11.0, v1.12.0 active)
 - [x] Guardrail modules for all 6 layers (input, tool-call, output, safety, privacy, compliance)
 - [x] Security model designed (5 properties) — implementation in progress
 - [x] `orchestrator.py` — single brain for both doors (one `handle_*` per job; risk score = higher of FinGuard and upstream engine score)
@@ -496,12 +522,15 @@ docker compose down                # stops them; models and audit logs stay in D
 - [x] Cash-only Currency Transaction Report flag in Tool 1 (7 tests)
 - [x] Reversible masking and Tool 8 `finguard_finalize_check`
 - [x] Pinned requirements, Docker image and Compose for both doors, GitHub Actions CI
-- [ ] Tests + evals
+- [x] Tests + evals
 - [x] PostgreSQL: encrypted vault, case history and append-only audit log, shared by both doors and surviving a restart
 - [x] Name masking (policy v1.6.0): party list, Presidio, Tool 4 tokens, Tool 8 report re-check
 - [x] Access control (policy v1.7.0): REST app key, agent keys on every tool that changes a case, required `case_id` in a set format
 - [x] Analyst release (policy v1.8.0): REST only, one key per analyst, the exact approved report, checked again at release
-- [ ] Measure name detection across names of different origins (Step 8)
+- [x] GLiNER finds names and addresses (policy v1.10.0)
+- [x] Arabic-script sanctions screening (policy v1.11.0)
+- [x] Exact check of amounts, periods and dates in legal claims (policy v1.12.0)
+- [x] Measure name detection across names of different origins (Step 8)
 - [ ] `/metrics` endpoint
 
 **Planned extras (after the core):**
