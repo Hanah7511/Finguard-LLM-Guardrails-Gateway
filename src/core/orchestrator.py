@@ -28,6 +28,7 @@ from src.core.sanctions_screener import SanctionsScreener
 from src.input_guardrails.pii.base import PIIDetector
 from src.input_guardrails.pii.presidio_detector import build_pii_detector
 from src.input_guardrails.pii.regex_detector import build_log_scrubber
+from src.input_guardrails.attack_classifier import AttackClassifier
 from src.input_guardrails.pipeline import InputGuardrailPipeline
 from src.input_guardrails.safety_classifier import SafetyModel
 from src.llm.client import LLMClient, LLMUnavailableError, build_llm_client
@@ -112,7 +113,9 @@ class Orchestrator:
         self.retriever = retriever or RegulationRetriever.from_json(settings.regulations_path, embedder, extra_paths=[settings.local_regulations_path])
         self.grounder = grounder or self._build_grounder(settings, embedder)
 
-        self.input = InputGuardrailPipeline(policy, self.pii_detector, safety_model)
+        self.input = InputGuardrailPipeline(
+            policy, self.pii_detector, safety_model, self._build_attack_classifier(policy, settings, embedder)
+        )
         self.tools = ToolCallGuardrailPipeline(policy, self.pii_detector, self._build_identity(policy, agent_keys))
         self.analysts = self._build_analysts(policy, analyst_keys)
         self.output = OutputGuardrailPipeline(policy, self.grounder, self.retriever, self.pii_detector)
@@ -158,6 +161,22 @@ class Orchestrator:
             return build_postgres_storage(settings, entity_types, build_log_scrubber())
         logger.warning("STORAGE_BACKEND=memory: a restart loses tokens and case records, and the two doors share nothing.")
         return PIIVault(entity_types), CaseTracker(), None
+
+    def load_models(self) -> None:
+        """Loads the models now, when a door starts, so the first user does not wait for them."""
+        self.pii_detector.load()
+        if self.input.attack_classifier:
+            self.input.attack_classifier.score("warm up")  # reads the weights and loads MiniLM
+
+    @staticmethod
+    def _build_attack_classifier(policy: GuardrailPolicy, settings: Settings, embedder: Embedder) -> Optional[AttackClassifier]:
+        """Reuses the MiniLM that law search already loads, so memory does not double. None when off."""
+        cfg = policy.input_guardrails.attack_classifier
+        if not cfg.enabled:
+            return None
+        return AttackClassifier(
+            settings.attack_classifier_path, embedder, settings.embedding_model, cfg.block_at, cfg.escalate_at, policy.version
+        )
 
     @staticmethod
     def _load_sanctions(settings: Settings, cfg: SanctionsScreeningPolicy) -> SanctionsScreener:
@@ -314,7 +333,7 @@ class Orchestrator:
         if parties and not case_id and self.policy.input_guardrails.party_masking:
             raise ValueError("parties need a case_id: their tokens belong to a case")
         decisions = []
-        for check in (self.input.injection, self.input.safety_patterns):
+        for check in self.input.query_checks:
             decision = check.check(query)
             decisions.append(decision)
             if decision.stops_pipeline:
@@ -324,7 +343,7 @@ class Orchestrator:
                     "request_id": request_id,
                     "risk_score": 1.0,
                     "risk_level": "HIGH",
-                    "recommendation": "block",
+                    "recommendation": "escalate_for_review" if decision.decision == Decision.ESCALATE else "block",
                     "reason": f"{decision.layer}: {decision.reasoning_trace}",
                     "policy_version": self.version,
                 }

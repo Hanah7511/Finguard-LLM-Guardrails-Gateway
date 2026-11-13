@@ -1,27 +1,27 @@
 {
-  "policy": "1.12.0",
+  "policy": "1.13.0",
   "attacks": {
     "AML dev": {
-      "attacks_caught": "0 of 9",
-      "catch_rate": "0%",
+      "attacks_caught": "7 of 9",
+      "catch_rate": "78%",
       "normal_blocked": "0 of 9",
       "false_block_rate": "0%"
     },
     "AML test": {
-      "attacks_caught": "0 of 6",
-      "catch_rate": "0%",
+      "attacks_caught": "4 of 6",
+      "catch_rate": "67%",
       "normal_blocked": "0 of 6",
       "false_block_rate": "0%"
     },
     "public, deepset": {
-      "attacks_caught": "0 of 60",
-      "catch_rate": "0%",
-      "normal_blocked": "0 of 56",
-      "false_block_rate": "0%"
+      "attacks_caught": "33 of 60",
+      "catch_rate": "55%",
+      "normal_blocked": "3 of 56",
+      "false_block_rate": "5%"
     },
     "public, Gandalf": {
-      "attacks_caught": "19 of 112",
-      "catch_rate": "17%",
+      "attacks_caught": "111 of 112",
+      "catch_rate": "99%",
       "normal_blocked": "0 of 0",
       "false_block_rate": "n/a"
     }
@@ -519,12 +519,16 @@
   },
   "speed": {
     "v1.9.0, Presidio only": {
-      "p50_ms": 6,
-      "p95_ms": 7
+      "p50_ms": 21,
+      "p95_ms": 29
     },
     "active policy": {
-      "p50_ms": 383,
-      "p95_ms": 616
+      "p50_ms": 621,
+      "p95_ms": 722
+    },
+    "attack classifier": {
+      "p50_ms": 34,
+      "p95_ms": 40
     }
   }
 }

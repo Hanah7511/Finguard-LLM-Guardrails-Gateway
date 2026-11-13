@@ -197,7 +197,7 @@ def main() -> None:
     if settings.mcp_transport == "stdio":
         server.run("stdio")  # not loaded here: a client that starts this door gives up if it is slow to answer
     else:
-        orch.pii_detector.load()
+        orch.load_models()
         server.run(settings.mcp_transport, host=settings.mcp_host, port=settings.mcp_port)
 
 

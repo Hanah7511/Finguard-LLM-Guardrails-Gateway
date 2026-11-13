@@ -65,6 +65,19 @@ class GlinerPolicy(StrictModel):
     labels: dict[str, str] = Field(default_factory=dict)  # what we ask the model for -> FinGuard's entity type
 
 
+class AttackClassifierPolicy(StrictModel):
+    # A small trained model that scores whether a request is an attack. Off before v1.13.0.
+    enabled: bool = False
+    block_at: float = Field(default=0.70, ge=0.0, le=1.0)     # this score or more: block
+    escalate_at: float = Field(default=0.35, ge=0.0, le=1.0)  # this score or more: a person decides
+
+    @model_validator(mode="after")
+    def _ordered(self) -> "AttackClassifierPolicy":
+        if self.escalate_at >= self.block_at:
+            raise ValueError("escalate_at must be below block_at")
+        return self
+
+
 class InputGuardrailsPolicy(StrictModel):
     require_consent: bool = True
     max_query_chars: int = Field(default=4000, gt=0)
@@ -77,6 +90,7 @@ class InputGuardrailsPolicy(StrictModel):
     custom_pii_recognizers: list[CustomPIIRecognizer] = Field(default_factory=list)
     llama_guard: LlamaGuardConfig = LlamaGuardConfig()
     gliner: GlinerPolicy = Field(default_factory=GlinerPolicy)
+    attack_classifier: AttackClassifierPolicy = Field(default_factory=AttackClassifierPolicy)
 
 
 class ToolCallGuardrailsPolicy(StrictModel):

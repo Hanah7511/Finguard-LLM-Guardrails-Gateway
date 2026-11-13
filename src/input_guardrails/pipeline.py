@@ -1,6 +1,6 @@
 """Runs input checks cheapest-first and stops at the first block.
 
-Order: length -> consent -> injection -> safety patterns -> PII masking -> Llama Guard.
+Order: length -> consent -> injection -> safety patterns -> attack classifier -> PII masking -> Llama Guard.
 Llama Guard sees the *masked* text.
 """
 from __future__ import annotations
@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from src.config.policy_schema import GuardrailPolicy
+from src.input_guardrails.attack_classifier import AttackClassifier
 from src.input_guardrails.injection_detector import InjectionDetector
 from src.input_guardrails.pii.base import PIIDetector
 from src.input_guardrails.safety_classifier import (
@@ -24,6 +25,10 @@ BLOCK_MESSAGES = {
     "input.injection": "Request blocked: it contains instructions that attempt to override system behaviour.",
     "input.safety_patterns": "Request blocked: it appears to seek help evading financial-crime controls.",
     "input.llama_guard": "Request blocked by the safety classifier.",
+    "input.attack_classifier": "Request blocked: it looks like an attempt to misuse the system or to get help with financial crime.",
+}
+ESCALATE_MESSAGES = {
+    "input.attack_classifier": "Request held for human review: it may be an attempt to misuse the system.",
 }
 
 
@@ -37,7 +42,11 @@ class InputPipelineResult:
 
     @property
     def message(self) -> Optional[str]:
-        return BLOCK_MESSAGES.get(self.blocked_by) if self.blocked_by else None
+        if not self.blocked_by:
+            return None
+        if self.decisions and self.decisions[-1].decision == Decision.ESCALATE:
+            return ESCALATE_MESSAGES.get(self.blocked_by)
+        return BLOCK_MESSAGES.get(self.blocked_by)
 
 
 class InputGuardrailPipeline:
@@ -46,6 +55,7 @@ class InputGuardrailPipeline:
         policy: GuardrailPolicy,
         pii_detector: PIIDetector,
         safety_model: Optional[SafetyModel] = None,
+        attack_classifier: Optional[AttackClassifier] = None,
     ) -> None:
         cfg = policy.input_guardrails
         self._cfg = cfg
@@ -54,6 +64,13 @@ class InputGuardrailPipeline:
         self.safety_patterns = PatternSafetyClassifier(cfg.safety_patterns, self._version)
         self.pii_detector = pii_detector
         self.llama_guard = LlamaGuardClassifier(cfg.llama_guard, self._version, safety_model)
+        self.attack_classifier = attack_classifier  # None when the policy has it switched off
+
+    @property
+    def query_checks(self) -> tuple:
+        """The checks every request goes through before masking: cheapest first."""
+        checks = (self.injection, self.safety_patterns)
+        return checks + (self.attack_classifier,) if self.attack_classifier else checks
 
     def run(
         self,
@@ -81,7 +98,7 @@ class InputGuardrailPipeline:
                 return blocked(consent_decision)
             decisions.append(consent_decision)
 
-        for check in (self.injection, self.safety_patterns):
+        for check in self.query_checks:
             decision = check.check(text)
             if decision.stops_pipeline:
                 return blocked(decision)

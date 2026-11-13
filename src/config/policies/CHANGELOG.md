@@ -3,6 +3,14 @@
 Every policy change gets a new versioned file, an entry here and a git commit.
 Old versions stay in place: reports record the version they were validated under.
 
+## 1.13.0 — 2026-11-12
+Approved by: compliance-team
+
+- Added `input_guardrails.attack_classifier`: a small trained model scores every request after the phrase lists.
+- A score of 0.70 or more is blocked; 0.50 to 0.70 is held for a person; the audit log records the score, never the text.
+- Trained on public train splits and our own fictional AML examples. Cut-offs chosen on the dev set and on
+  the sample alert queries, which must all pass. The test set was not used.
+
 ## 1.12.0 — 2026-11-08
 Approved by: compliance-team
 

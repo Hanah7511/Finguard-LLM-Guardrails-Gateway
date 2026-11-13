@@ -5,6 +5,9 @@
 pytest==7.4.3
 httpx==0.28.1
 
+# scripts/train_attack_classifier.py (FinGuard itself only needs numpy to use the trained model)
+scikit-learn==1.7.2
+
 # scripts/build_local_law_store.py and scripts/build_sanctions_lists.py
 pypdf==6.21.1
 xlrd==2.0.2

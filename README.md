@@ -207,7 +207,8 @@ finguard-llm-guardrails-gateway/
 │   │       ├── v1.9.0_guardrail_policy.yaml
 │   │       ├── v1.10.0_guardrail_policy.yaml
 │   │       ├── v1.11.0_guardrail_policy.yaml
-│   │       ├── v1.12.0_guardrail_policy.yaml  # active
+│   │       ├── v1.12.0_guardrail_policy.yaml
+│   │       ├── v1.13.0_guardrail_policy.yaml  # active
 │   │       └── CHANGELOG.md
 │   ├── core/
 │   │   ├── orchestrator.py          # THE BRAIN — one handle_* per job
@@ -221,6 +222,7 @@ finguard-llm-guardrails-gateway/
 │   │   ├── patterns.py
 │   │   ├── injection_detector.py
 │   │   ├── safety_classifier.py
+│   │   ├── attack_classifier.py     # trained model: MiniLM numbers → attack score
 │   │   ├── pii/
 │   │   │   ├── base.py
 │   │   │   ├── regex_detector.py
@@ -264,11 +266,14 @@ finguard-llm-guardrails-gateway/
 ├── data/
 │   ├── law_store/                   # official law texts, split by section
 │   ├── sanctions/                   # sanctions lists (fictional test list committed)
-│   └── sample_alerts/               # fictional alerts: the upstream-engine contract
+│   ├── sample_alerts/               # fictional alerts: the upstream-engine contract
+│   ├── classifiers/                 # the trained attack classifier, saved as JSON weights
+│   └── training/                    # hand-written fictional AML examples for training it
 ├── scripts/
 │   ├── build_law_store.py           # US regulations from eCFR / govinfo
 │   ├── build_local_law_store.py     # FATF, UAE and CBUAE texts from local PDFs
 │   ├── build_sanctions_lists.py     # UN, UAE Local Terrorist List, OFAC SDN
+│   ├── train_attack_classifier.py   # trains the attack classifier (public train splits + our AML rows)
 │   ├── run_sample_alerts.py         # runs the sample alerts, compares with expected
 │   ├── fake_agent.py                # scripted stand-in for finintel's 3 agents (MCP client)
 │   ├── check_doors.py               # checks that both running doors answer
@@ -354,7 +359,7 @@ AGENT_KEY_COMPLIANCE=cmp-secret-...
 AGENT_KEY_SUMMARIZATION=sum-secret-...
 
 # Active policy version
-ACTIVE_POLICY_VERSION=1.12.0
+ACTIVE_POLICY_VERSION=1.13.0
 ```
 
 ### 3. Run FastAPI (standalone)
@@ -427,15 +432,15 @@ docker compose stop                # stops everything; data and models stay
 
 ## Metrics & Evaluation
 
-### Measured results (policy v1.12.0, test sets)
+### Measured results (policy v1.13.0, test sets)
 
 Run with `python evals/run_evals.py`. Results are saved in `evals/results/latest.json`. Tuning used the dev sets only.
 
 | Check | Result | Notes |
 |---|---|---|
-| Attacks caught, AML test set | **0 of 6** | Phrase rules only, no trained classifier yet |
-| Attacks caught, deepset | **0 of 60** | Includes German text; the rules are in English. 0 of 56 normal prompts blocked |
-| Attacks caught, Gandalf | **19 of 112 (17%)** | |
+| Attacks stopped, AML test set | **4 of 6** (was 0 of 6) | Trained classifier, policy v1.13.0. Stopped = blocked or held for a person. 0 of 6 normal requests stopped |
+| Attacks stopped, deepset | **33 of 60 (55%)** (was 0 of 60) | Includes German text. 3 of 56 normal prompts wrongly stopped (was 0) |
+| Attacks stopped, Gandalf | **111 of 112 (99%)** (was 19 of 112) | Easy case: the classifier was trained on Gandalf's train split, which is the same kind of text |
 | Names hidden, 8 groups including Arabic script | 106 of 106 | Small hand-written set |
 | Ordinary sentences with a word masked as a name | 1 of 20 | |
 | Personal data hidden | 27 of 28 | Missed: an IBAN split across lines |
@@ -444,9 +449,10 @@ Run with `python evals/run_evals.py`. Results are saved in `evals/results/latest
 | Innocent names wrongly flagged | 1 of 21 | Small fictional list |
 | True legal claims accepted | 8 of 9 | |
 | False legal claims refused | 17 of 18 (94%) | |
-| Masking speed, p50 / p95 | 383 / 616 ms | Rules only: 6 / 7 ms. Laptop CPU, varies with load |
+| Masking speed, p50 / p95 | 621 / 722 ms | Rules only: 21 / 29 ms. Laptop CPU, varies with load (an earlier run: 383 / 616 ms) |
+| Attack classifier speed, p50 / p95 | 34 / 40 ms | After MiniLM is loaded; it loads when a door starts |
 
-**Read these with care.** The sets are small, so one case moves a score a lot. Attack detection is the weakest part. Not measured yet: false alarms on the real sanctions lists, confidence calibration, escalation rate and tool-call accuracy.
+**Read these with care.** The sets are small, so one case moves a score a lot: with 6 AML test attacks, 4 of 6 could mean a real rate anywhere from about 30% to 90%. The attack classifier catches injections well. Its weak spot is AML harm requests (asking how to avoid a report): both dev attacks it missed were of that kind. It reads English only. On FinGuard's normal sample alerts its highest score is 0.45, close to the 0.50 cut-off, so new kinds of normal traffic may be held by mistake. A held request is stopped and recorded in the audit log, but there is no review queue for it yet. Not measured yet: false alarms on the real sanctions lists, confidence calibration, escalation rate and tool-call accuracy.
 
 ### Level 1 — Per-layer metrics
 
@@ -470,7 +476,7 @@ Run with `python evals/run_evals.py`. Results are saved in `evals/results/latest
 | Sanctions match recall | `sanctions_screen()` | Name variation testing: Mohammed / Muhammad / Mohamed |
 | Task success rate | Full MCP flow | Scripted fake-agent now; real finintel later |
 | Policy version coverage | All decisions | Must be 100% — automatic test, not a score |
-| Policy v1.0.0 → v1.12.0 | Full eval suite | Run on every version; compare results |
+| Policy v1.0.0 → v1.13.0 | Full eval suite | Run on every version; compare results |
 | End-to-end agent run | `scripts/fake_agent.py` (12 alerts, `--rogue`) | Task success: every investigation reaches the expected outcome; rogue calls refused |
 | Sample alert regression | `data/sample_alerts/alerts.json` | `python scripts/run_sample_alerts.py` — must stay 12/12 unless a policy change explains the difference |
 
@@ -507,7 +513,7 @@ Run with `python evals/run_evals.py`. Results are saved in `evals/results/latest
 **In active development.** Part of the Financial Risk Intelligence Platform portfolio.
 
 - [x] Architecture + design (dual-door, 6 guardrail layers, 8 MCP tools)
-- [x] Versioned YAML policy engine (v1.0.0 – v1.11.0, v1.12.0 active)
+- [x] Versioned YAML policy engine (v1.0.0 – v1.12.0, v1.13.0 active)
 - [x] Guardrail modules for all 6 layers (input, tool-call, output, safety, privacy, compliance)
 - [x] Security model designed (5 properties) — implementation in progress
 - [x] `orchestrator.py` — single brain for both doors (one `handle_*` per job; risk score = higher of FinGuard and upstream engine score)
@@ -530,6 +536,7 @@ Run with `python evals/run_evals.py`. Results are saved in `evals/results/latest
 - [x] GLiNER finds names and addresses (policy v1.10.0)
 - [x] Arabic-script sanctions screening (policy v1.11.0)
 - [x] Exact check of amounts, periods and dates in legal claims (policy v1.12.0)
+- [x] Trained attack classifier (policy v1.13.0): block, or hold for a person when unsure
 - [x] Measure name detection across names of different origins (Step 8)
 - [ ] `/metrics` endpoint
 

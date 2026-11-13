@@ -56,7 +56,7 @@ def test_hybrid_loads_every_detector_and_a_detector_with_no_model_does_nothing()
 
 def test_the_rest_door_loads_the_model_as_it_starts(monkeypatch):
     detector = CountsLoads()
-    orch = SimpleNamespace(require_app_key_is_set=lambda: None, require_analyst_key_is_set=lambda: None, pii_detector=detector)
+    orch = SimpleNamespace(require_app_key_is_set=lambda: None, require_analyst_key_is_set=lambda: None, load_models=detector.load)
     monkeypatch.setattr(api, "get_orchestrator", lambda: orch)
     with TestClient(api.app):
         assert detector.loads == 1
@@ -66,7 +66,7 @@ def run_mcp_main(monkeypatch, transport):
     detector = CountsLoads()
     runs = []
     monkeypatch.setattr(mcp_door, "get_settings", lambda: SimpleNamespace(mcp_transport=transport, mcp_host="h", mcp_port=1))
-    monkeypatch.setattr(mcp_door, "get_orchestrator", lambda: SimpleNamespace(pii_detector=detector))
+    monkeypatch.setattr(mcp_door, "get_orchestrator", lambda: SimpleNamespace(load_models=detector.load))
     monkeypatch.setattr(mcp_door, "create_server", lambda orch: SimpleNamespace(run=lambda *a, **k: runs.append(detector.loads)))
     mcp_door.main()
     return runs

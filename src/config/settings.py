@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 30.0
 
     # Policy
-    active_policy_version: str = "1.12.0"
+    active_policy_version: str = "1.13.0"
     policy_dir: Path = PROJECT_ROOT / "src" / "config" / "policies"
 
     # Data
@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     # FICTIONAL list, used only when the real lists have not been built
     sanctions_test_list_path: Path = PROJECT_ROOT / "data" / "sanctions" / "test_sanctions_list.json"
     audit_log_path: Path = PROJECT_ROOT / "logs" / "audit.jsonl"
+    # Trained by scripts/train_attack_classifier.py: 384 weights and a bias, no pickle
+    attack_classifier_path: Path = PROJECT_ROOT / "data" / "classifiers" / "attack_classifier.json"
 
     # Storage. "memory" is for tests and quick local runs: a restart loses tokens and case records.
     # "postgres" refuses to start without the database and the key. SecretStr keeps both out of logs.

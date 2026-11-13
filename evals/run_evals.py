@@ -22,30 +22,44 @@ from src.config.policy_loader import get_policy, load_policy  # noqa: E402
 from src.config.settings import get_settings  # noqa: E402
 from src.core.sanctions_screener import SanctionsScreener  # noqa: E402
 from src.input_guardrails.pii.presidio_detector import build_pii_detector  # noqa: E402
+from src.input_guardrails.attack_classifier import AttackClassifier  # noqa: E402
 from src.input_guardrails.pipeline import InjectionDetector, PatternSafetyClassifier  # noqa: E402
 from src.input_guardrails.pii.regex_detector import RegexPIIDetector  # noqa: E402
 from src.output_guardrails.grounding.base import GroundingVerdict  # noqa: E402
 from src.output_guardrails.grounding.nli_grounding import NLIGrounder  # noqa: E402
 from src.output_guardrails.pipeline import OutputGuardrailPipeline  # noqa: E402
-from src.vector_store.retriever import RegulationRetriever  # noqa: E402
+from src.vector_store.retriever import RegulationRetriever, SentenceTransformerEmbedder  # noqa: E402
 
 DATASETS = ROOT / "evals" / "datasets"
 CACHE = ROOT / "evals" / "cache"  # public data: downloaded once, never committed
 RESULTS = ROOT / "evals" / "results" / "latest.json"
-# Public test splits. Their train splits stay unused here, free for training a model later.
+# Public test splits. Their train splits train the attack classifier (scripts/train_attack_classifier.py).
 DEEPSET = "deepset/prompt-injections"  # Apache 2.0. Label 1 is an attack, 0 is normal text.
 GANDALF = "Lakera/gandalf_ignore_instructions"  # MIT. Attacks only, so it has no false block rate.
 ROWS_URL = "https://datasets-server.huggingface.co/rows"
 
 
+def build_attack_classifier():
+    """The trained classifier, or None if the active policy has it switched off."""
+    policy, settings = get_policy(), get_settings()
+    cfg = policy.input_guardrails.attack_classifier
+    if not cfg.enabled:
+        return None
+    embedder = SentenceTransformerEmbedder(settings.embedding_model)
+    return AttackClassifier(settings.attack_classifier_path, embedder, settings.embedding_model, cfg.block_at, cfg.escalate_at, policy.version)
+
+
 def attack_checker():
-    """The same two pattern checks Tool 1 runs on a query."""
+    """The same checks Tool 1 runs on a query. A request counts as stopped if it is blocked or sent to a person."""
     policy = get_policy()
     cfg = policy.input_guardrails
-    checks = (
+    checks = [
         InjectionDetector(cfg.injection_patterns, policy.version),
         PatternSafetyClassifier(cfg.safety_patterns, policy.version),
-    )
+    ]
+    classifier = build_attack_classifier()
+    if classifier:
+        checks.append(classifier)
     return lambda text: any(check.check(text).stops_pipeline for check in checks)
 
 
@@ -233,11 +247,21 @@ def run_speed_eval() -> dict:
             times.append((time.perf_counter() - start) * 1000)
         times.sort()
         rows[label] = {"p50_ms": round(times[len(times) // 2]), "p95_ms": round(times[int(len(times) * 0.95)])}
+    classifier = build_attack_classifier()
+    if classifier:  # the attack classifier's own cost, per request
+        classifier.score(sentences[0])  # the first call loads MiniLM, so it is not timed
+        times = []
+        for sentence in sentences:
+            start = time.perf_counter()
+            classifier.score(sentence)
+            times.append((time.perf_counter() - start) * 1000)
+        times.sort()
+        rows["attack classifier"] = {"p50_ms": round(times[len(times) // 2]), "p95_ms": round(times[int(len(times) * 0.95)])}
     return rows
 
 
 def print_speed(speed: dict) -> None:
-    print("\nSpeed: time to mask one short sentence")
+    print("\nSpeed: time for one short sentence (masking, and the attack classifier if on)")
     print(f"  {'detector':<30}{'p50':<14}p95")
     for label, row in speed.items():
         print(f"  {label:<30}{str(row['p50_ms']) + ' ms':<14}{row['p95_ms']} ms")
