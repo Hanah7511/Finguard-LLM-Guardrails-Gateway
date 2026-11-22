@@ -68,6 +68,9 @@ class GlinerPolicy(StrictModel):
 class AttackClassifierPolicy(StrictModel):
     # A small trained model that scores whether a request is an attack. Off before v1.13.0.
     enabled: bool = False
+    # A file name inside data/classifiers/, so each policy version keeps its own model.
+    # Letters, digits, dot, dash and underscore only: a policy can never point outside that folder.
+    model_file: str = Field(default="attack_classifier.json", pattern=r"^[A-Za-z0-9_.-]+\.json$")
     block_at: float = Field(default=0.70, ge=0.0, le=1.0)     # this score or more: block
     escalate_at: float = Field(default=0.35, ge=0.0, le=1.0)  # this score or more: a person decides
 

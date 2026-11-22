@@ -3,6 +3,18 @@
 Every policy change gets a new versioned file, an entry here and a git commit.
 Old versions stay in place: reports record the version they were validated under.
 
+## 1.14.0 — 2026-11-22
+Approved by: compliance-team
+
+- `input_guardrails.attack_classifier.model_file` names the model each policy uses, so 1.13.0 keeps its own model.
+- 1.14.0 uses `attack_classifier_v2.json`: trained with 230 AML rows (was 126), including attack and
+  analyst sentences on the same topics, so the model learns intent rather than topic.
+- Row votes 3 and C 0.3 were picked from 12 settings by a rule fixed before looking, using practice sentences
+  and normal FinGuard requests only. Cut-offs unchanged (0.70 block, 0.50 a person decides).
+- Exam written by the project owner (87 messages, never seen by the trainer, scored once before and once after):
+  attacks stopped 12 → 22 of 47, normal messages wrongly stopped 1 → 1 of 40. Sample alerts still 12 of 12.
+- Trade-off: deepset attacks stopped 33 → 24 of 60 (normal wrongly stopped 3 → 2 of 56).
+
 ## 1.13.0 — 2026-11-12
 Approved by: compliance-team
 

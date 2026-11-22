@@ -208,7 +208,8 @@ finguard-llm-guardrails-gateway/
 │   │       ├── v1.10.0_guardrail_policy.yaml
 │   │       ├── v1.11.0_guardrail_policy.yaml
 │   │       ├── v1.12.0_guardrail_policy.yaml
-│   │       ├── v1.13.0_guardrail_policy.yaml  # active
+│   │       ├── v1.13.0_guardrail_policy.yaml
+│   │       ├── v1.14.0_guardrail_policy.yaml  # active
 │   │       └── CHANGELOG.md
 │   ├── core/
 │   │   ├── orchestrator.py          # THE BRAIN — one handle_* per job
@@ -263,6 +264,14 @@ finguard-llm-guardrails-gateway/
 ├── test/
 │   ├── integration/                 # real PostgreSQL tests, skipped unless a database address is set
 │   └── unit/                        # cost-free tests: test sanctions list, no LLM, no audit file
+├── evals/
+│   ├── run_evals.py                 # every check on the dev and test sets; saves results/latest.json
+│   ├── score_exam.py                # scores the exam once before and once after a change (refuses a re-run)
+│   ├── check_practice.py            # error analysis on the practice set only
+│   ├── check_generalisation.py      # Gandalf left out of training; deepset by language
+│   ├── build_attacks_v2.py          # practice and exam in one file
+│   ├── datasets/                    # hand-written dev and test sets (public data is downloaded, not committed)
+│   └── results/                     # saved scores, counts only
 ├── data/
 │   ├── law_store/                   # official law texts, split by section
 │   ├── sanctions/                   # sanctions lists (fictional test list committed)
@@ -273,7 +282,8 @@ finguard-llm-guardrails-gateway/
 │   ├── build_law_store.py           # US regulations from eCFR / govinfo
 │   ├── build_local_law_store.py     # FATF, UAE and CBUAE texts from local PDFs
 │   ├── build_sanctions_lists.py     # UN, UAE Local Terrorist List, OFAC SDN
-│   ├── train_attack_classifier.py   # trains the attack classifier (public train splits + our AML rows)
+│   ├── train_attack_classifier.py   # trains the attack classifier: 12 settings, one picked by a fixed rule
+│   ├── check_similarity.py          # near-copy check between training, practice and exam (prints numbers only)
 │   ├── run_sample_alerts.py         # runs the sample alerts, compares with expected
 │   ├── fake_agent.py                # scripted stand-in for finintel's 3 agents (MCP client)
 │   ├── check_doors.py               # checks that both running doors answer
@@ -359,7 +369,7 @@ AGENT_KEY_COMPLIANCE=cmp-secret-...
 AGENT_KEY_SUMMARIZATION=sum-secret-...
 
 # Active policy version
-ACTIVE_POLICY_VERSION=1.13.0
+ACTIVE_POLICY_VERSION=1.14.0
 ```
 
 ### 3. Run FastAPI (standalone)
@@ -432,15 +442,16 @@ docker compose stop                # stops everything; data and models stay
 
 ## Metrics & Evaluation
 
-### Measured results (policy v1.13.0, test sets)
+### Measured results (policy v1.14.0, test sets)
 
 Run with `python evals/run_evals.py`. Results are saved in `evals/results/latest.json`. Tuning used the dev sets only.
 
 | Check | Result | Notes |
 |---|---|---|
-| Attacks stopped, AML test set | **4 of 6** (was 0 of 6) | Trained classifier, policy v1.13.0. Stopped = blocked or held for a person. 0 of 6 normal requests stopped |
-| Attacks stopped, deepset | **33 of 60 (55%)** (was 0 of 60) | Includes German text. 3 of 56 normal prompts wrongly stopped (was 0) |
-| Attacks stopped, Gandalf | **111 of 112 (99%)** (was 19 of 112) | Easy case: the classifier was trained on Gandalf's train split, which is the same kind of text |
+| Attacks stopped, exam written by the project owner | **22 of 47 (47%)** (v1.13.0: 12 of 47) | 87 messages the trainer never saw. 1 of 40 normal messages wrongly stopped (unchanged). See below |
+| Attacks stopped, small AML test set | **4 of 6** (before the classifier: 0 of 6) | Stopped = blocked or held for a person. 0 of 6 normal requests stopped |
+| Attacks stopped, deepset | **24 of 60 (40%)** (v1.13.0: 33 of 60; no classifier: 0) | 2 of 56 normal prompts wrongly stopped. English 23 of 44, German 1 of 16 |
+| Attacks stopped, Gandalf | **111 of 112 (99%)** (no classifier: 19 of 112) | Easy case: one style of attack. Still 112 of 112 when Gandalf is left out of training |
 | Names hidden, 8 groups including Arabic script | 106 of 106 | Small hand-written set |
 | Ordinary sentences with a word masked as a name | 1 of 20 | |
 | Personal data hidden | 27 of 28 | Missed: an IBAN split across lines |
@@ -449,10 +460,46 @@ Run with `python evals/run_evals.py`. Results are saved in `evals/results/latest
 | Innocent names wrongly flagged | 1 of 21 | Small fictional list |
 | True legal claims accepted | 8 of 9 | |
 | False legal claims refused | 17 of 18 (94%) | |
-| Masking speed, p50 / p95 | 621 / 722 ms | Rules only: 21 / 29 ms. Laptop CPU, varies with load (an earlier run: 383 / 616 ms) |
-| Attack classifier speed, p50 / p95 | 34 / 40 ms | After MiniLM is loaded; it loads when a door starts |
+| Masking speed, p50 / p95 | 280 / 454 ms | Rules only: 5 / 6 ms. Laptop CPU, varies a lot with load (earlier runs: 621 / 722 and 383 / 616 ms) |
+| Attack classifier speed, p50 / p95 | 15 / 22 ms | After MiniLM is loaded; it loads when a door starts (an earlier run: 34 / 40 ms) |
 
-**Read these with care.** The sets are small, so one case moves a score a lot: with 6 AML test attacks, 4 of 6 could mean a real rate anywhere from about 30% to 90%. The attack classifier catches injections well. Its weak spot is AML harm requests (asking how to avoid a report): both dev attacks it missed were of that kind. It reads English only. On FinGuard's normal sample alerts its highest score is 0.45, close to the 0.50 cut-off, so new kinds of normal traffic may be held by mistake. A held request is stopped and recorded in the audit log, but there is no review queue for it yet. Not measured yet: false alarms on the real sanctions lists, confidence calibration, escalation rate and tool-call accuracy.
+**Read these with care.** The sets are small, so one case moves a score a lot: with 6 AML test attacks, 4 of 6 could mean a real rate anywhere from about 30% to 90%. The attack classifier reads English only. On FinGuard's normal sample alerts its highest score is just under the 0.50 cut-off, so new kinds of normal traffic may be held by mistake. A held request is stopped and recorded in the audit log, but there is no review queue for it yet. Not measured yet: false alarms on the real sanctions lists, confidence calibration, escalation rate and tool-call accuracy.
+
+### Attack classifier v2: scored on an exam it never saw (policy v1.14.0)
+
+The 6-question AML test set was too small to trust, and the earlier attack examples were written by the same person as the training rows, so they shared a writing style: the model scored 73% on rows in that style and 26% on new wording. So the project owner wrote an exam of 87 messages: 47 attacks in 12 groups and 40 normal analyst messages, 15 of them on the same topics as the attacks. The person writing the training rows never read it.
+
+How it was kept fair:
+
+- Practice (70 messages) and the exam are separate. Every choice was made on practice and on 14 normal FinGuard requests only.
+- A near-copy check (cosine similarity of MiniLM vectors) found no training or practice sentence at 0.90 or more to an exam sentence. The highest was 0.74: the same topic, said differently.
+- Row weight and regularisation (C) were picked from 12 settings by a rule written into the code before the results were seen.
+- The switch rule was also written before the exam: more attacks stopped, no more normal messages stopped, sample alerts still 12 of 12, no more deepset false stops.
+- The exam was scored twice, before and after. `evals/score_exam.py` refuses a second run, and it never prints which messages were missed.
+
+| Exam (87 messages) | v1.13.0 (before) | v1.14.0 (after) |
+|---|---|---|
+| Attacks stopped | 12 of 47 (26%) | **22 of 47 (47%)** |
+| tricking the AI (injection) | 7 of 17 | 11 of 17 |
+| asking for help with financial crime | 5 of 30 | 11 of 30 |
+| Normal messages wrongly stopped | 1 of 40 | 1 of 40 |
+| Classifier: blocked / held for a person | 4 / 8 | 2 / 20 |
+
+What changed: 230 hand-written AML training rows (was 126). 104 of the new rows are pairs on the same topic, one written as an attacker and one as an analyst, so the model has to learn intent, not topic.
+
+Limits:
+
+- More than half of the attacks still get through (25 of 47). Requests for help with financial crime are the weak spot: 19 of 30 missed.
+- With 47 attacks, 47% could be anywhere from about 34% to 61%. The gain was measured on the same questions, so it is real for this exam, but the exact rate is uncertain.
+- The new model is less sure of itself: most of its catches are held for a person, not blocked. That is safe, but it means more review work, and there is no review queue yet.
+- Trade-off: deepset attacks stopped fell from 33 to 24 of 60. The settings were chosen for AML, and general injection got weaker.
+- One person wrote the exam. Another analyst's wording may score differently.
+- The exam has now been used. Further tuning needs a new one.
+
+Two more checks (`evals/check_generalisation.py`):
+
+- Gandalf left out of training: still 112 of 112 stopped, so the model learned the "ignore your instructions" style rather than Gandalf's own examples. It is the easiest style of attack.
+- deepset by language (a rough word check): English 23 of 44 attacks stopped, German 1 of 16. MiniLM reads English. German and Arabic need a multilingual model.
 
 ### Level 1 — Per-layer metrics
 
@@ -476,7 +523,7 @@ Run with `python evals/run_evals.py`. Results are saved in `evals/results/latest
 | Sanctions match recall | `sanctions_screen()` | Name variation testing: Mohammed / Muhammad / Mohamed |
 | Task success rate | Full MCP flow | Scripted fake-agent now; real finintel later |
 | Policy version coverage | All decisions | Must be 100% — automatic test, not a score |
-| Policy v1.0.0 → v1.13.0 | Full eval suite | Run on every version; compare results |
+| Policy v1.0.0 → v1.14.0 | Full eval suite | Run on every version; compare results |
 | End-to-end agent run | `scripts/fake_agent.py` (12 alerts, `--rogue`) | Task success: every investigation reaches the expected outcome; rogue calls refused |
 | Sample alert regression | `data/sample_alerts/alerts.json` | `python scripts/run_sample_alerts.py` — must stay 12/12 unless a policy change explains the difference |
 
@@ -513,7 +560,7 @@ Run with `python evals/run_evals.py`. Results are saved in `evals/results/latest
 **In active development.** Part of the Financial Risk Intelligence Platform portfolio.
 
 - [x] Architecture + design (dual-door, 6 guardrail layers, 8 MCP tools)
-- [x] Versioned YAML policy engine (v1.0.0 – v1.12.0, v1.13.0 active)
+- [x] Versioned YAML policy engine (v1.0.0 – v1.13.0, v1.14.0 active)
 - [x] Guardrail modules for all 6 layers (input, tool-call, output, safety, privacy, compliance)
 - [x] Security model designed (5 properties) — implementation in progress
 - [x] `orchestrator.py` — single brain for both doors (one `handle_*` per job; risk score = higher of FinGuard and upstream engine score)
@@ -537,6 +584,7 @@ Run with `python evals/run_evals.py`. Results are saved in `evals/results/latest
 - [x] Arabic-script sanctions screening (policy v1.11.0)
 - [x] Exact check of amounts, periods and dates in legal claims (policy v1.12.0)
 - [x] Trained attack classifier (policy v1.13.0): block, or hold for a person when unsure
+- [x] Attack classifier v2 (policy v1.14.0), scored on an exam written by the project owner: 12 → 22 of 47 attacks stopped
 - [x] Measure name detection across names of different origins (Step 8)
 - [ ] `/metrics` endpoint
 

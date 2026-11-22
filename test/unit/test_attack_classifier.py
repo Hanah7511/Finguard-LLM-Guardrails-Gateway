@@ -77,9 +77,11 @@ def test_cut_offs_in_the_wrong_order_are_refused(tmp_path, block_at, escalate_at
         AttackClassifier(write_model(tmp_path), FakeEmbedder(), NAME, block_at, escalate_at, "test")
 
 
-def test_the_real_saved_model_fits_finguards_embedder():
+@pytest.mark.parametrize("version", ["1.13.0", "1.14.0"])
+def test_each_saved_model_fits_finguards_embedder(version):
     """No MiniLM needed: only checks the committed file matches what FinGuard will feed it."""
-    path = Path("data/classifiers/attack_classifier.json")
+    from src.config.policy_loader import load_policy
+    path = get_settings().classifiers_dir / load_policy(version).input_guardrails.attack_classifier.model_file
     model = json.loads(path.read_text(encoding="utf-8"))
     assert model["embedder"] == get_settings().embedding_model
     assert len(model["weights"]) == 384  # all-MiniLM-L6-v2 gives 384 numbers per text
@@ -133,6 +135,17 @@ def run(decision: Decision):
 def test_policy_1_13_turns_it_on_and_older_policies_keep_it_off():
     assert POLICY.input_guardrails.attack_classifier.enabled
     assert not load_policy("1.12.0").input_guardrails.attack_classifier.enabled
+
+
+def test_each_policy_keeps_its_own_model_file():
+    assert load_policy("1.13.0").input_guardrails.attack_classifier.model_file == "attack_classifier.json"
+    assert load_policy("1.14.0").input_guardrails.attack_classifier.model_file == "attack_classifier_v2.json"
+
+
+@pytest.mark.parametrize("name", ["../secrets.json", "sub/model.json", "..\\model.json", "model.pkl", ""])
+def test_a_model_file_outside_the_folder_is_refused(name):
+    with pytest.raises(ValidationError):
+        AttackClassifierPolicy(enabled=True, model_file=name)
 
 
 def test_the_policy_refuses_cut_offs_in_the_wrong_order():

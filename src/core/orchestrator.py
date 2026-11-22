@@ -175,7 +175,8 @@ class Orchestrator:
         if not cfg.enabled:
             return None
         return AttackClassifier(
-            settings.attack_classifier_path, embedder, settings.embedding_model, cfg.block_at, cfg.escalate_at, policy.version
+            settings.classifiers_dir / cfg.model_file, embedder, settings.embedding_model, cfg.block_at, cfg.escalate_at,
+            policy.version,
         )
 
     @staticmethod

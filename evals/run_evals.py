@@ -46,7 +46,8 @@ def build_attack_classifier():
     if not cfg.enabled:
         return None
     embedder = SentenceTransformerEmbedder(settings.embedding_model)
-    return AttackClassifier(settings.attack_classifier_path, embedder, settings.embedding_model, cfg.block_at, cfg.escalate_at, policy.version)
+    return AttackClassifier(settings.classifiers_dir / cfg.model_file, embedder, settings.embedding_model,
+                            cfg.block_at, cfg.escalate_at, policy.version)
 
 
 def attack_checker():

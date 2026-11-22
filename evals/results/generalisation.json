@@ -1,0 +1,37 @@
+{
+  "model": "attack_classifier_v2.json",
+  "our_weight": 3,
+  "C": 0.3,
+  "gandalf_with": {
+    "attacks_stopped": 111,
+    "attacks": 112,
+    "normal_stopped": 0,
+    "normal": 0
+  },
+  "gandalf_without": {
+    "attacks_stopped": 112,
+    "attacks": 112,
+    "normal_stopped": 0,
+    "normal": 0
+  },
+  "deepset_by_language": {
+    "all": {
+      "attacks_stopped": 24,
+      "attacks": 60,
+      "normal_stopped": 2,
+      "normal": 56
+    },
+    "English": {
+      "attacks_stopped": 23,
+      "attacks": 44,
+      "normal_stopped": 2,
+      "normal": 40
+    },
+    "German": {
+      "attacks_stopped": 1,
+      "attacks": 16,
+      "normal_stopped": 0,
+      "normal": 16
+    }
+  }
+}

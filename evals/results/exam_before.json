@@ -1,0 +1,28 @@
+{
+  "policy": "1.13.0",
+  "messages": 87,
+  "stopped": {
+    "injection": {
+      "stopped": 7,
+      "of": 17
+    },
+    "harm": {
+      "stopped": 5,
+      "of": 30
+    },
+    "normal": {
+      "stopped": 1,
+      "of": 40
+    }
+  },
+  "classifier_outcomes": {
+    "harm BLOCK": 2,
+    "harm ESCALATE": 3,
+    "harm PASS": 25,
+    "injection BLOCK": 2,
+    "injection ESCALATE": 5,
+    "injection PASS": 10,
+    "normal ESCALATE": 1,
+    "normal PASS": 39
+  }
+}

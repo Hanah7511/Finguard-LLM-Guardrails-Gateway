@@ -16,9 +16,12 @@ EMBEDDER = "sentence-transformers/all-MiniLM-L6-v2"  # same model as settings.em
 CACHE = Path("evals/cache")  # gitignored: public data is never committed
 URL = "https://datasets-server.huggingface.co/rows?"
 AML_TRAIN = Path("data/training/aml_attack_train.json")
-EVAL_SET = Path("evals/datasets/attacks.json")
-OUR_WEIGHT = 3  # each of our AML rows counts 3x; chosen on dev and the traffic check (5 blocked more normal texts)
-MODEL_OUT = Path("data/classifiers/attack_classifier.json")  # small, readable, safe to commit
+EVAL_SET = Path("evals/datasets/attacks_v2.json")  # dev = practice (tune here), test = the exam (never tuned on)
+MODEL_OUT = Path("data/classifiers/attack_classifier_v2.json")  # new file: policy v1.13.0 keeps the old model
+# Settings we try, 3 x 4 = 12 models. Chosen on practice + traffic check only, never on the exam.
+WEIGHTS = (1, 3, 5)         # "row votes": how many times each of our AML rows counts
+CS = (0.1, 0.3, 1.0, 3.0)   # C: small = broad rules only, big = allowed to memorise
+NEAR_COPY = 0.90            # a training row this similar to a held-out sentence is a near-copy
 BLOCK_AT = 0.70     # sure it's an attack: block. Chosen on dev only.
 ESCALATE_AT = 0.50  # unsure: a human decides. Above every sample alert (top 0.45); 7 of 9 dev attacks stopped.
 ALERTS = Path("data/sample_alerts/alerts.json")
@@ -64,6 +67,54 @@ def load_aml_train() -> list[dict]:
     return rows
 
 
+def check_near_copies(X_aml: np.ndarray, X_held_out: np.ndarray) -> None:
+    """Stops if any AML training row is almost the same sentence as a practice, exam or traffic sentence.
+    Prints row numbers only, never the sentences."""
+    S = X_aml @ X_held_out.T   # vectors have length 1, so this is cosine similarity
+    pairs = list(zip(*(S >= NEAR_COPY).nonzero()))
+    print(f"near-copy check: highest similarity {S.max():.2f} | pairs at {NEAR_COPY} or more: {len(pairs)}")
+    for i, j in pairs:
+        print(f"  AML training row {i} ~ held-out row {j}  similarity {S[i, j]:.2f}")
+    assert not pairs, "training rows too close to held-out sentences: rewrite those training rows"
+
+
+def train(X: np.ndarray, labels: np.ndarray, n_aml: int, our_weight: int, C: float) -> LogisticRegression:
+    """Public rows count 1, our AML rows (the last n_aml) count our_weight."""
+    weights = np.ones(len(labels))
+    weights[-n_aml:] = our_weight
+    clf = LogisticRegression(C=C, max_iter=2000, class_weight="balanced")  # balanced: attacks vs normal counts
+    return clf.fit(X, labels, sample_weight=weights)
+
+
+def compare_settings(X, labels, n_aml, X_dev, dev_labels, X_traffic) -> tuple[int, float]:
+    """Trains 12 models and picks one by a rule written BEFORE looking at the table:
+      1. no normal FinGuard traffic stopped
+      2. at most 1 normal practice sentence stopped
+      3. then: the most practice attacks stopped
+      4. tie: the lowest top traffic score (most room before a false stop)"""
+    n_att, n_norm = int((dev_labels == 1).sum()), int((dev_labels == 0).sum())
+    print(f"\nvotes     C | practice attacks stopped | practice normal stopped | traffic stopped | top traffic")
+    results = []
+    for w in WEIGHTS:
+        for C in CS:
+            clf = train(X, labels, n_aml, w, C)
+            dev_stop = clf.predict_proba(X_dev)[:, 1] >= ESCALATE_AT    # escalate or block = stopped
+            traffic = clf.predict_proba(X_traffic)[:, 1]
+            r = {"w": w, "C": C,
+                 "attacks": int((dev_stop & (dev_labels == 1)).sum()),
+                 "normal": int((dev_stop & (dev_labels == 0)).sum()),
+                 "traffic": int((traffic >= ESCALATE_AT).sum()),
+                 "top": float(traffic.max())}
+            results.append(r)
+            print(f"{w:>5} {C:>5} | {r['attacks']:>10} of {n_att:<11} | {r['normal']:>10} of {n_norm:<10} "
+                  f"| {r['traffic']:>7} of {len(traffic):<5} | {r['top']:.2f}")
+    safe = [r for r in results if r["traffic"] == 0 and r["normal"] <= 1]
+    assert safe, "no setting passes the safety rules: keep the old model"
+    best = max(safe, key=lambda r: (r["attacks"], -r["top"]))
+    print(f"\nchosen by the rule: votes {best['w']}, C {best['C']}")
+    return best["w"], best["C"]
+
+
 def build_training_set(deepset: list[dict], gandalf: list[dict], aml: list[dict]) -> tuple[list[str], np.ndarray]:
     """All texts in one list, and a label for each: 1 = attack, 0 = normal."""
     texts = [r["text"] for r in deepset + gandalf + aml]
@@ -94,7 +145,7 @@ def score_from_saved(model: dict, X: np.ndarray) -> np.ndarray:
     return 1 / (1 + np.exp(-(X @ np.array(model["weights"]) + model["bias"])))
 
 
-def save_model(clf: LogisticRegression, labels: np.ndarray, aml: list[dict], X_dev: np.ndarray) -> None:
+def save_model(clf: LogisticRegression, labels: np.ndarray, aml: list[dict], X_dev: np.ndarray, our_weight: int) -> None:
     """Saves the 384 weights and the bias as JSON (never pickle: loading a pickle can run code).
     Stops before writing if the saved numbers don't give the same scores as scikit-learn."""
     model = {
@@ -108,7 +159,8 @@ def save_model(clf: LogisticRegression, labels: np.ndarray, aml: list[dict], X_d
             "attacks": int((labels == 1).sum()),
             "normal": int((labels == 0).sum()),
             "public": ["deepset/prompt-injections (train)", "Lakera/gandalf_ignore_instructions (train)"],
-            "our_weight": OUR_WEIGHT,
+            "our_weight": our_weight,
+            "C": float(clf.C),
             # fingerprint of the rows, not the file bytes, so Windows/Linux line endings don't change it
             "aml_rows_sha256": hashlib.sha256(json.dumps(aml, sort_keys=True).encode("utf-8")).hexdigest(),
         },
@@ -160,24 +212,31 @@ if __name__ == "__main__":
     X = embedder.encode(texts, normalize_embeddings=True, batch_size=32, show_progress_bar=False)
     print("each text is now", X.shape[1], "numbers")
 
-    clf = LogisticRegression(max_iter=2000, class_weight="balanced")  # balanced: fixes 980 vs 343
+    evals = json.loads(EVAL_SET.read_text(encoding="utf-8"))
+    dev = evals["dev"]
+    dev_labels = np.array([int(r["label"] == "attack") for r in dev])
+    X_dev = embedder.encode([r["text"] for r in dev], normalize_embeddings=True)
+    traffic = load_traffic_check()
+    X_traffic = embedder.encode(traffic, normalize_embeddings=True)
 
-    # Public rows count 1, our AML rows count OUR_WEIGHT, so our rows aren't drowned out by 1,300.
+    # The exam is turned into numbers only for the near-copy check: never scored, never printed.
+    X_exam = embedder.encode([r["text"] for r in evals["test"]], normalize_embeddings=True)
+    check_near_copies(X[-len(aml):], np.vstack([X_dev, X_exam, X_traffic]))
+
+    # --- Step 9e: try 12 settings, pick one by the rule written in advance ---
+    our_weight, C = compare_settings(X, labels, len(aml), X_dev, dev_labels, X_traffic)
+
+    # 5-fold check of the chosen settings: train on 4/5, score the 1/5 it never saw, repeat 5 times.
     weights = np.ones(len(labels))
-    weights[-len(aml):] = OUR_WEIGHT
-
-    # 5-fold check: train on 4/5, score the 1/5 it never saw, repeat 5 times.
+    weights[-len(aml):] = our_weight
     folds = StratifiedKFold(n_splits=5, shuffle=True, random_state=0)
-    cv_scores = cross_val_predict(clf, X, labels, cv=folds, method="predict_proba",
-                                  params={"sample_weight": weights})[:, 1]
+    cv_scores = cross_val_predict(LogisticRegression(C=C, max_iter=2000, class_weight="balanced"), X, labels,
+                                  cv=folds, method="predict_proba", params={"sample_weight": weights})[:, 1]
     report("\n5-fold, all training rows", cv_scores, labels, 0.5)
     report("5-fold, our AML rows only", cv_scores[-len(aml):], labels[-len(aml):], 0.5)
 
-    # Train once on everything, then score the dev set. The test set is never scored here.
-    clf.fit(X, labels, sample_weight=weights)
-    dev = json.loads(EVAL_SET.read_text(encoding="utf-8"))["dev"]
-    dev_labels = np.array([int(r["label"] == "attack") for r in dev])
-    X_dev = embedder.encode([r["text"] for r in dev], normalize_embeddings=True)
+    # Train the final model on everything with the chosen settings, then score practice. Never the exam.
+    clf = train(X, labels, len(aml), our_weight, C)
     dev_scores = clf.predict_proba(X_dev)[:, 1]
     print()
     for cutoff in (0.3, 0.5, 0.7, 0.9):
@@ -185,7 +244,7 @@ if __name__ == "__main__":
 
     print("\nAML dev, highest score first:")
     for row, score in sorted(zip(dev, dev_scores), key=lambda pair: -pair[1]):
-        print(f"  {score:.2f}  {decide(score):<9}{row['label']:<7} {row['text'][:70]}")
+        print(f"  {score:.2f}  {decide(score):<9}{row['label']:<7} {row['text'][:70]}".encode("ascii", "replace").decode())
 
     # --- Step 6: three outcomes and a saved model ---
     outcomes = [decide(s) for s in dev_scores]
@@ -194,11 +253,10 @@ if __name__ == "__main__":
           f"  (normal: block {normal_out.count('block')}, escalate {normal_out.count('escalate')})")
 
     # Real-looking FinGuard traffic: none of it should be stopped.
-    traffic = load_traffic_check()
-    traffic_scores = clf.predict_proba(embedder.encode(traffic, normalize_embeddings=True))[:, 1]
+    traffic_scores = clf.predict_proba(X_traffic)[:, 1]
     stopped = [(s, t) for s, t in zip(traffic_scores, traffic) if decide(s) != "allow"]
     print(f"\nTraffic check: {len(stopped)} of {len(traffic)} normal requests stopped | highest score {traffic_scores.max():.2f}")
     for score, text in sorted(stopped, reverse=True):
         print(f"  {score:.2f}  {decide(score):<9}{text[:70]}")
 
-    save_model(clf, labels, aml, X_dev)
+    save_model(clf, labels, aml, X_dev, our_weight)

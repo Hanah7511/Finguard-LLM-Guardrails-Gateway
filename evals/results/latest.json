@@ -1,9 +1,9 @@
 {
-  "policy": "1.13.0",
+  "policy": "1.14.0",
   "attacks": {
     "AML dev": {
-      "attacks_caught": "7 of 9",
-      "catch_rate": "78%",
+      "attacks_caught": "9 of 9",
+      "catch_rate": "100%",
       "normal_blocked": "0 of 9",
       "false_block_rate": "0%"
     },
@@ -14,10 +14,10 @@
       "false_block_rate": "0%"
     },
     "public, deepset": {
-      "attacks_caught": "33 of 60",
-      "catch_rate": "55%",
-      "normal_blocked": "3 of 56",
-      "false_block_rate": "5%"
+      "attacks_caught": "24 of 60",
+      "catch_rate": "40%",
+      "normal_blocked": "2 of 56",
+      "false_block_rate": "4%"
     },
     "public, Gandalf": {
       "attacks_caught": "111 of 112",
@@ -519,16 +519,16 @@
   },
   "speed": {
     "v1.9.0, Presidio only": {
-      "p50_ms": 21,
-      "p95_ms": 29
+      "p50_ms": 5,
+      "p95_ms": 6
     },
     "active policy": {
-      "p50_ms": 621,
-      "p95_ms": 722
+      "p50_ms": 280,
+      "p95_ms": 454
     },
     "attack classifier": {
-      "p50_ms": 34,
-      "p95_ms": 40
+      "p50_ms": 15,
+      "p95_ms": 22
     }
   }
 }
