@@ -14,6 +14,26 @@
 
 ---
 
+## In 30 seconds
+
+**What it does.** FinGuard is a safety layer for AI used in anti-money-laundering work. It stops attempts to trick the AI or get help with financial crime, hides personal data before the AI sees it, screens names against sanctions lists, and refuses AI answers that misquote the law. When it is unsure, it holds the request for a person instead of guessing.
+
+**How it is used.** Apps call it through a REST API, and AI agents through an MCP server with 8 tools. The rules live in versioned YAML files, so an auditor can see which rules made each decision.
+
+| Measured on test sets that no tuning used | Result |
+|---|---|
+| Attacks stopped, on an exam written by the project owner | **22 of 47** (was 12), with 1 of 40 normal analyst messages stopped |
+| Names hidden, 8 name origins including Arabic script | **106 of 106** |
+| Personal data hidden (IBAN, card, passport, Emirates ID...) | **27 of 28** |
+| False legal claims refused | **17 of 18** |
+| Fictional sample alerts handled as expected | **12 of 12** |
+
+**Honest limits.** More than half of the attacks on the exam still get through, and held requests have no review queue yet. The attack check reads English only. The test sets are small, so each result is uncertain by several points. FinGuard runs on a laptop and in Docker. It is not deployed in production.
+
+**Try it without an LLM key.** After [installing](#1-clone--install), `python scripts/fake_agent.py` runs the 12 sample alerts through the MCP tools, and `python -m pytest test` runs 330 tests. The first run downloads the models. Full numbers and how they were measured: [Metrics & Evaluation](#metrics--evaluation).
+
+---
+
 ## What is FinGuard?
 
 LLM-powered systems in financial services face risks that standard application security doesn't address:
@@ -118,25 +138,28 @@ NLI grounding against official law texts (US BSA regulations; FATF Recommendatio
 
 ---
 
-## Orchestrator — handle_* Pattern
+## The orchestrator: one manager behind both doors
 
-The orchestrator loads all workers once at startup (PII masker, NLI checker, sanctions screener, law store, pipelines, audit log). Both doors share the same orchestrator — no logic is duplicated.
+Think of FinGuard as an office with two front doors: one for apps (the REST API) and one for AI agents (the MCP server). Behind both doors sits the same manager, the **orchestrator**. Each job has one method, named `handle_<job>`, and both doors call the same methods, so every rule is written only once.
 
-| Function | Door | Workers used |
-|----------|------|--------------|
-| `handle_chat()` | API `/chat` | All: input → law lookup → GPT → output guards |
-| `handle_validate()` | API `/validate` | Input guards only — no GPT, no cost |
-| `handle_assess_risk()` | MCP Tool 1 | Injection + safety scan → risk assessor |
-| `handle_validate_tool_call()` | MCP Tool 2 | Agent key → allowlist → parameter check |
-| `handle_pii_check()` | MCP Tool 3 | PII masker → hidden instruction scanner |
-| `handle_sanctions_screen()` | MCP Tool 4 | Sanctions screener only |
-| `handle_validate_grounding()` | MCP Tool 5 | Law store + NLI checker, per claim |
-| `handle_get_policy_info()` | MCP Tool 6 + `/policy` | YAML rulebook reader |
-| `handle_scan_documents()` | MCP Tool 7 | Hidden instruction scanner |
-| `handle_finalize_check()` | MCP Tool 8 | Agent key → case record → approve the masked report |
-| `handle_release()` | REST only | App key + analyst key → case record → same report → real values |
+Each door runs its own copy of the orchestrator: the same code, in separate memory. The name finder and the attack classifier load when a door starts, so the first user does not wait. (The MCP door in stdio mode loads them on first use instead, because the client gives up if the door is slow to start.) The model that checks legal claims loads the first time it is needed.
 
-> Every `handle_*` follows the same 4 steps: **(1)** Call the right workers → **(2)** Collect decisions (PASS / BLOCK / MASK) → **(3)** Write one audit record with `case_id`, no private data → **(4)** Return a simple answer with reason.
+| Method | Called from | What it does |
+|--------|-------------|--------------|
+| `handle_chat()` | REST `/chat` | Checks the question, finds the relevant law, asks the AI model (GPT), then checks its answer |
+| `handle_validate()` | REST `/validate` | Checks the text and hides personal data. No AI model call, so no cost |
+| `handle_assess_risk()` | MCP Tool 1, REST `/assess-risk` | Attack checks on the question, then a risk score and the cash report (CTR) rule. People and companies the caller lists become tokens |
+| `handle_validate_tool_call()` | MCP Tool 2 | Is the agent who it says it is (its key)? May it use this tool? Are the inputs in the right format? |
+| `handle_pii_check()` | MCP Tool 3 | Hides personal data, then looks for hidden instructions in the text |
+| `handle_sanctions_screen()` | MCP Tool 4, REST `/sanctions-screen` | Checks a name against the sanctions lists |
+| `handle_validate_grounding()` | MCP Tool 5 | For each legal claim: finds the law it cites and checks that the law really says it |
+| `handle_get_policy_info()` | MCP Tool 6, REST `/policy` | Shows which rules (policy version) are active |
+| `handle_scan_documents()` | MCP Tool 7 | Looks for hidden instructions inside documents |
+| `handle_finalize_check()` | MCP Tool 8 | Before a report goes to a person: were all the required checks done for this case? If so, the report is approved, still with personal data hidden |
+| `handle_release()` | REST `/cases/{case_id}/release` only | Gives a named analyst the real values behind the tokens, for the exact report that was approved |
+| `handle_get_metrics()` | REST `/metrics` | How many requests were allowed, blocked or held for a person, how long checks take, and AI model cost |
+
+> Every `handle_*` method does the same 4 things: **(1)** runs the right checks, **(2)** collects each check's decision (PASS, MASK, BLOCK, ESCALATE, ...), **(3)** writes one audit record, with the case number but no personal data, **(4)** returns a short answer with the reason.
 
 ---
 
@@ -346,7 +369,7 @@ FinGuard runs today with Docker or plain Python. Items marked *planned* are not 
 git clone https://github.com/Hanah7511/Finguard-LLM-Guardrails-Gateway
 cd Finguard-LLM-Guardrails-Gateway
 python -m venv .venv
-source .venv/bin/activate      # Windows: .venv\Scriptsctivate
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt  # requirements-dev.txt adds the test and data-building tools
 ```
 
@@ -588,19 +611,19 @@ Two more checks (`evals/check_generalisation.py`):
 - [x] Trained attack classifier (policy v1.13.0): block, or hold for a person when unsure
 - [x] Attack classifier v2 (policy v1.14.0), scored on an exam written by the project owner: 12 → 22 of 47 attacks stopped
 - [x] Measure name detection across names of different origins (Step 8)
-- [x] `/metrics` endpoint (REST door): requests allowed / blocked / held, held rate, per-layer decisions and p50/p95 timings, LLM tokens and cost. In memory, so a restart resets it, and each door counts only its own requests
+- [x] `/metrics` endpoint (REST door): how many requests were allowed, blocked or held for a person, how long each check takes (typical and slowest: p50 / p95), and AI model tokens and cost. The counts are kept in memory, so a restart sets them back to zero, and each door counts only its own requests
 
 **Planned next: monitoring and cost (not built yet)**
 
-- [ ] `/metrics` in Prometheus text format (`?format=prometheus`), so Grafana or Prometheus can read it
-- [ ] Total time per request and LLM call time, each with p50 / p95
-- [ ] LLM prices in a data file with a "checked on" date; calls with no price are counted
-- [ ] Alert rules in the policy (held rate, p95 time, spend), shown in `/metrics` and logged
-- [ ] Drift check on the attack classifier's scores (population stability index against a baseline)
-- [ ] Daily LLM budget in the policy: once reached, `/chat` sends requests to review instead of the LLM
-- [ ] Cap on LLM answer length, and reuse of an approved answer to the same masked question under the same policy
-- [ ] In PostgreSQL mode, `/metrics` counted from the audit log, so it covers both doors and survives a restart
-- Later, with finintel: tracing one case across all agents, cost per agent and per case. Routing easy questions to a cheaper model waits until answer quality can be measured with a real LLM.
+- [ ] `/metrics` also in the format monitoring tools read (Prometheus), so a dashboard such as Grafana can show it
+- [ ] How long each whole request takes, and how long the AI model takes to answer (p50 / p95 for both)
+- [ ] AI model prices in a separate file, with the date they were checked. Calls with an unknown price are counted
+- [ ] Warnings when something looks wrong: too many requests held, checks too slow, or spending too high
+- [ ] A warning when the attack checker starts scoring requests differently from before (drift, measured with the population stability index)
+- [ ] A daily spending limit for the AI model. Once it is reached, `/chat` sends questions to a person instead
+- [ ] A limit on how long AI answers can be, and reuse of an approved answer when the same question (with personal data hidden) is asked again
+- [ ] When FinGuard uses its PostgreSQL database, `/metrics` counts from the audit log, so the numbers include both doors and survive a restart
+- Later, with finintel: following one case through all the agents, and cost per agent and per case. Sending easy questions to a cheaper AI model waits until answer quality can be measured with a real AI model.
 
 **Planned extras (after the core):**
 
