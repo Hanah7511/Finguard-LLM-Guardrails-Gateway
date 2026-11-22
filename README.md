@@ -260,7 +260,8 @@ finguard-llm-guardrails-gateway/
 │   └── monitoring/
 │       ├── telemetry.py
 │       ├── decision_logger.py
-│       └── cost_tracker.py
+│       ├── cost_tracker.py
+│       └── metrics.py               # counts and p50/p95 timings for GET /metrics (no text, ids or names)
 ├── test/
 │   ├── integration/                 # real PostgreSQL tests, skipped unless a database address is set
 │   └── unit/                        # cost-free tests: test sanctions list, no LLM, no audit file
@@ -284,6 +285,7 @@ finguard-llm-guardrails-gateway/
 │   ├── build_sanctions_lists.py     # UN, UAE Local Terrorist List, OFAC SDN
 │   ├── train_attack_classifier.py   # trains the attack classifier: 12 settings, one picked by a fixed rule
 │   ├── check_similarity.py          # near-copy check between training, practice and exam (prints numbers only)
+│   ├── rotate_agent_keys.py         # replaces the agent keys in .env with new random ones (never prints them)
 │   ├── run_sample_alerts.py         # runs the sample alerts, compares with expected
 │   ├── fake_agent.py                # scripted stand-in for finintel's 3 agents (MCP client)
 │   ├── check_doors.py               # checks that both running doors answer
@@ -380,7 +382,7 @@ uvicorn src.api.main:app --reload --port 8000
 # Test
 curl http://localhost:8000/health
 curl -H "X-API-Key: <your key>" http://localhost:8000/policy
-curl http://localhost:8000/metrics   # planned
+curl -H "X-API-Key: <your key>" http://localhost:8000/metrics   # counts since the door started
 ```
 
 ### 4. Run MCP server (for AI agents)
@@ -586,7 +588,19 @@ Two more checks (`evals/check_generalisation.py`):
 - [x] Trained attack classifier (policy v1.13.0): block, or hold for a person when unsure
 - [x] Attack classifier v2 (policy v1.14.0), scored on an exam written by the project owner: 12 → 22 of 47 attacks stopped
 - [x] Measure name detection across names of different origins (Step 8)
-- [ ] `/metrics` endpoint
+- [x] `/metrics` endpoint (REST door): requests allowed / blocked / held, held rate, per-layer decisions and p50/p95 timings, LLM tokens and cost. In memory, so a restart resets it, and each door counts only its own requests
+
+**Planned next: monitoring and cost (not built yet)**
+
+- [ ] `/metrics` in Prometheus text format (`?format=prometheus`), so Grafana or Prometheus can read it
+- [ ] Total time per request and LLM call time, each with p50 / p95
+- [ ] LLM prices in a data file with a "checked on" date; calls with no price are counted
+- [ ] Alert rules in the policy (held rate, p95 time, spend), shown in `/metrics` and logged
+- [ ] Drift check on the attack classifier's scores (population stability index against a baseline)
+- [ ] Daily LLM budget in the policy: once reached, `/chat` sends requests to review instead of the LLM
+- [ ] Cap on LLM answer length, and reuse of an approved answer to the same masked question under the same policy
+- [ ] In PostgreSQL mode, `/metrics` counted from the audit log, so it covers both doors and survives a restart
+- Later, with finintel: tracing one case across all agents, cost per agent and per case. Routing easy questions to a cheaper model waits until answer quality can be measured with a real LLM.
 
 **Planned extras (after the core):**
 

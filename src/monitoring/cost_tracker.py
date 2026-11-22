@@ -55,6 +55,11 @@ class CostTracker:
             self.request_count += 1
         return rec
 
+    def totals(self) -> dict:
+        """Every LLM call since this door started."""
+        with self._lock:
+            return {"calls": self.request_count, "tokens": self.total_tokens, "cost_usd": round(self.total_cost_usd, 6)}
+
     def _match_prefix(self, model: str) -> tuple[float, float] | None:
         # "gpt-4o-2024-08-06" -> "gpt-4o"; longest prefix wins.
         for name in sorted(self._pricing, key=len, reverse=True):

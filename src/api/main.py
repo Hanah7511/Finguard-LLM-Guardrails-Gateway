@@ -77,6 +77,12 @@ def policy(orch: Orchestrator = Depends(get_orchestrator)) -> dict[str, Any]:
     return orch.handle_get_policy_info()
 
 
+@app.get("/metrics", dependencies=APP_KEY)
+def metrics(orch: Orchestrator = Depends(get_orchestrator)) -> dict[str, Any]:
+    """Counts and timings since this door started. Needs the key: activity is internal information."""
+    return orch.handle_get_metrics()
+
+
 @app.post("/validate", dependencies=APP_KEY)
 def validate(req: ValidateRequest, orch: Orchestrator = Depends(get_orchestrator)) -> dict[str, Any]:
     """Input guards only, no LLM call. For apps that call their own LLM."""

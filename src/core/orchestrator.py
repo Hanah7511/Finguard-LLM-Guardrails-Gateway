@@ -33,6 +33,7 @@ from src.input_guardrails.pipeline import InputGuardrailPipeline
 from src.input_guardrails.safety_classifier import SafetyModel
 from src.llm.client import LLMClient, LLMUnavailableError, build_llm_client
 from src.monitoring.cost_tracker import CostTracker
+from src.monitoring.metrics import Metrics
 from src.monitoring.decision_logger import DecisionLogger
 from src.monitoring.telemetry import Decision, GuardrailDecision
 from src.output_guardrails.grounding.base import Grounder, GroundingVerdict
@@ -136,6 +137,7 @@ class Orchestrator:
         self._app_key = api_key if len(api_key) >= MIN_KEY_CHARS else None  # too short counts as no key
 
         self.cost_tracker = CostTracker()
+        self.metrics = Metrics()  # counts for GET /metrics: no text, ids or names
         self.audit = audit or stored_audit or DecisionLogger(settings.audit_log_path, build_log_scrubber())
         self.llm = llm or build_llm_client(
             settings.openai_api_key, settings.llm_model, settings.llm_temperature, settings.llm_timeout_seconds
@@ -230,6 +232,7 @@ class Orchestrator:
                 **extra,
             }
         )
+        self.metrics.record(event, decisions, failed=extra.get("status") == "LLM_UNAVAILABLE")
         return request_id
 
 
@@ -686,6 +689,10 @@ class Orchestrator:
         text, known = self.vault.mask_known(case_id, report_text)
         result = self.pii_detector.mask(text, self.vault.tokenizer(case_id))
         return result.masked_text, len(known) + len(result.entities)
+
+    def handle_get_metrics(self) -> dict[str, Any]:
+        """GET /metrics. Outcomes, per-layer decisions and timings, and LLM tokens and cost since this door started."""
+        return {"policy_version": self.version, **self.metrics.snapshot(), "llm": self.cost_tracker.totals()}
 
     def handle_get_policy_info(self) -> dict[str, Any]:
         """Tool 6 and GET /policy. Which rules are active, for audit traceability."""
