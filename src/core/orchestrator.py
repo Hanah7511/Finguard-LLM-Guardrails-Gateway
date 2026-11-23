@@ -7,10 +7,12 @@ handle_* method runs only the checks that request needs, writes one audit record
 """
 from __future__ import annotations
 
+import functools
 import hashlib
 import hmac
 import re
 import logging
+import time
 import uuid
 from collections import Counter
 from functools import lru_cache
@@ -32,8 +34,8 @@ from src.input_guardrails.attack_classifier import AttackClassifier
 from src.input_guardrails.pipeline import InputGuardrailPipeline
 from src.input_guardrails.safety_classifier import SafetyModel
 from src.llm.client import LLMClient, LLMUnavailableError, build_llm_client
-from src.monitoring.cost_tracker import CostTracker
-from src.monitoring.metrics import Metrics
+from src.monitoring.cost_tracker import CostTracker, load_pricing
+from src.monitoring.metrics import Metrics, to_prometheus
 from src.monitoring.decision_logger import DecisionLogger
 from src.monitoring.telemetry import Decision, GuardrailDecision
 from src.output_guardrails.grounding.base import Grounder, GroundingVerdict
@@ -87,6 +89,22 @@ def new_request_id() -> str:
     return f"REQ-{uuid.uuid4().hex[:12].upper()}"
 
 
+def timed(method):
+    """Times one whole request, from arrival to answer, for GET /metrics. Refusals and errors
+    count too (finally): they are part of the real wait."""
+    name = method.__name__.removeprefix("handle_")
+
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        start = time.perf_counter()
+        try:
+            return method(self, *args, **kwargs)
+        finally:
+            self.metrics.record_time(name, round((time.perf_counter() - start) * 1000, 3))
+
+    return wrapper
+
+
 class Orchestrator:
     def __init__(
         self,
@@ -136,7 +154,7 @@ class Orchestrator:
         api_key = settings.finguard_api_key.get_secret_value() if settings.finguard_api_key else ""
         self._app_key = api_key if len(api_key) >= MIN_KEY_CHARS else None  # too short counts as no key
 
-        self.cost_tracker = CostTracker()
+        self.cost_tracker = CostTracker(load_pricing(settings.llm_pricing_path))
         self.metrics = Metrics()  # counts for GET /metrics: no text, ids or names
         self.audit = audit or stored_audit or DecisionLogger(settings.audit_log_path, build_log_scrubber())
         self.llm = llm or build_llm_client(
@@ -273,6 +291,7 @@ class Orchestrator:
             self._audit("access_denied", [who], case_id, tool=tool, agent=agent_name)
             raise AccessDenied(who.reasoning_trace)
 
+    @timed
     def handle_chat(
         self, query: str, consent: Optional[bool], customer_id: Optional[str] = None, case_id: Optional[str] = None
     ) -> dict[str, Any]:
@@ -305,6 +324,7 @@ class Orchestrator:
 
         }
 
+    @timed
     def handle_validate(
         self, text: str, consent: Optional[bool] = None, enforce_consent: bool = False, case_id: Optional[str] = None
     ) -> dict[str, Any]:
@@ -323,6 +343,7 @@ class Orchestrator:
 
     # ── MCP door (and reusable by any caller) ───────────────────────
 
+    @timed
     def handle_assess_risk(
         self,
         query: str,
@@ -389,6 +410,7 @@ class Orchestrator:
             })
         return registered
 
+    @timed
     def handle_validate_tool_call(
         self,
         agent_name: str,
@@ -416,6 +438,7 @@ class Orchestrator:
         }
     
 
+    @timed
     def handle_pii_check(self, text: str, case_id: Optional[str] = None) -> dict[str, Any]:
         """Tool 3. Mask PII in a tool result and scan it for hidden instructions.
         Tokens need a case to belong to: without a case_id the values are masked for good."""
@@ -437,6 +460,7 @@ class Orchestrator:
             "policy_version": self.version,
         }
 
+    @timed
     def handle_sanctions_screen(
         self, entity_name: str, country: Optional[str] = None, case_id: Optional[str] = None, dob: Optional[str] = None, nationality: Optional[str] = None, id_number: Optional[str] = None,
         owners: Optional[list[dict[str, Any]]] = None, identifiers_verified: bool = False,
@@ -521,6 +545,7 @@ class Orchestrator:
             for o in owners
         ]
 
+    @timed
     def handle_validate_grounding(self, claims: list[dict[str, str]], case_id: Optional[str] = None) -> dict[str, Any]:
         """Tool 5. Each claim is checked against FinGuard's OWN copy of the cited law."""
         decisions, results = [], []
@@ -562,6 +587,7 @@ class Orchestrator:
             "policy_version": self.version,
         }
 
+    @timed
     def handle_scan_documents(self, documents: list[str], case_id: Optional[str] = None) -> dict[str, Any]:
         """Tool 7. Find hidden instructions in retrieved (RAG) documents."""
         scan = self.tools.scan_documents(documents)
@@ -574,6 +600,7 @@ class Orchestrator:
             "policy_version": self.version,
         }
     
+    @timed
     def handle_finalize_check(
         self, agent_name: str, report_text: str, case_id: str, agent_key: Optional[str] = None
     ) -> dict[str, Any]:
@@ -640,6 +667,7 @@ class Orchestrator:
         if cfg.enabled and not any(self.analysts.has_key(a) for a in cfg.allowed_analysts):
             raise RuntimeError(f"Policy {self.version} needs a key for one of: {', '.join(cfg.allowed_analysts)} (ANALYST_KEY_<NAME>)")
 
+    @timed
     def handle_release(self, case_id: str, report_text: str, analyst_key: Optional[str]) -> dict[str, Any]:
         """REST only, and never an MCP tool: no agent can even ask for real values. Only the exact
         report Tool 8 approved can be released, and the case is checked again first, because it may
@@ -693,6 +721,10 @@ class Orchestrator:
     def handle_get_metrics(self) -> dict[str, Any]:
         """GET /metrics. Outcomes, per-layer decisions and timings, and LLM tokens and cost since this door started."""
         return {"policy_version": self.version, **self.metrics.snapshot(), "llm": self.cost_tracker.totals()}
+
+    def handle_get_metrics_prometheus(self) -> str:
+        """GET /metrics/prometheus. The same numbers, in the text format Prometheus reads."""
+        return to_prometheus(self.handle_get_metrics())
 
     def handle_get_policy_info(self) -> dict[str, Any]:
         """Tool 6 and GET /policy. Which rules are active, for audit traceability."""

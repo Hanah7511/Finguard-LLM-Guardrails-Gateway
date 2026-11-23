@@ -1,18 +1,27 @@
-"""Tracks token usage and cost per request."""
+"""Tracks token usage, cost and time per LLM call. Prices come from data/llm_pricing.json."""
 from __future__ import annotations
 
+import json
 import threading
+from collections import deque
 from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Mapping, Optional
 
-# USD per 1M tokens (input, output). Check against your provider's current price sheet.
-DEFAULT_PRICING: dict[str, tuple[float, float]] = {
-    "gpt-4": (30.00, 60.00),
-    "gpt-4-turbo": (10.00, 30.00),
-    "gpt-4o": (2.50, 10.00),
-    "gpt-4o-mini": (0.15, 0.60),
-    "gpt-4.1": (2.00, 8.00),
-    "gpt-4.1-mini": (0.40, 1.60),
-}
+from src.monitoring.metrics import percentile
+
+
+def load_pricing(path: Path) -> dict[str, tuple[float, float]]:
+    """USD per 1M tokens (input, output) for each model. A broken file stops the door from starting:
+    a wrong price table would make every cost wrong without anyone noticing."""
+    models = json.loads(path.read_text(encoding="utf-8"))["models"]
+    pricing = {}
+    for name, price in models.items():
+        rates = (float(price["input"]), float(price["output"]))
+        if min(rates) < 0:
+            raise ValueError(f"{path.name}: negative price for {name}")
+        pricing[name] = rates
+    return pricing
 
 
 @dataclass
@@ -29,14 +38,18 @@ class CostRecord:
 
 
 class CostTracker:
-    def __init__(self, pricing: dict[str, tuple[float, float]] | None = None) -> None:
-        self._pricing = dict(pricing or DEFAULT_PRICING)
+    def __init__(self, pricing: Optional[Mapping[str, tuple[float, float]]] = None, window: int = 1000) -> None:
+        self._pricing = dict(pricing or {})  # no table: every call counts as unpriced, never as free
         self._lock = threading.Lock()
         self.total_tokens = 0
         self.total_cost_usd = 0.0
         self.request_count = 0
+        self.unpriced_calls = 0
+        self._llm_ms: deque = deque(maxlen=window)  # only the last `window` call times
 
-    def record(self, model: str, prompt_tokens: int, completion_tokens: int) -> CostRecord:
+    def record(
+        self, model: str, prompt_tokens: int, completion_tokens: int, latency_ms: Optional[float] = None
+    ) -> CostRecord:
         rates = self._pricing.get(model) or self._match_prefix(model)
         cost = 0.0
         if rates:
@@ -53,12 +66,26 @@ class CostTracker:
             self.total_tokens += rec.total_tokens
             self.total_cost_usd += rec.cost_usd
             self.request_count += 1
+            if not rec.priced:
+                self.unpriced_calls += 1
+            if latency_ms is not None:
+                self._llm_ms.append(latency_ms)
         return rec
 
     def totals(self) -> dict:
-        """Every LLM call since this door started."""
+        """Every LLM call since this door started. cost_is_complete is False when some call had no
+        price: cost_usd is then too low, not exact."""
         with self._lock:
-            return {"calls": self.request_count, "tokens": self.total_tokens, "cost_usd": round(self.total_cost_usd, 6)}
+            timings = list(self._llm_ms)
+            return {
+                "calls": self.request_count,
+                "unpriced_calls": self.unpriced_calls,
+                "cost_is_complete": self.unpriced_calls == 0,
+                "tokens": self.total_tokens,
+                "cost_usd": round(self.total_cost_usd, 6),
+                "p50_ms": percentile(timings, 50),
+                "p95_ms": percentile(timings, 95),
+            }
 
     def _match_prefix(self, model: str) -> tuple[float, float] | None:
         # "gpt-4o-2024-08-06" -> "gpt-4o"; longest prefix wins.

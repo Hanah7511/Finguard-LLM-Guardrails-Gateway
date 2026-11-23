@@ -84,6 +84,7 @@ def rest(orch):
 AUTHORISED_ROUTES = [
     ("get", "/policy", None),
     ("get", "/metrics", None),
+    ("get", "/metrics/prometheus", None),
     ("post", "/validate", {"text": "Hello"}),
     ("post", "/chat", {"query": "When is a CTR due?"}),
     ("post", "/assess-risk", {**RISK, "case_id": "CASE-1"}),

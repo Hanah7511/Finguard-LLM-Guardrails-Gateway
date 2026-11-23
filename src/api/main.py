@@ -13,10 +13,12 @@ from contextlib import asynccontextmanager
 from typing import Any, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Response
+from fastapi.responses import PlainTextResponse
 
 from src.api.schemas import AssessRiskRequest, ChatRequest, ReleaseRequest, SanctionsScreenRequest, ValidateRequest
 from src.core.orchestrator import AccessDenied, Orchestrator, get_orchestrator
 from src.llm.client import LLMUnavailableError
+from src.monitoring.metrics import PROMETHEUS_CONTENT_TYPE
 
 
 @asynccontextmanager
@@ -81,6 +83,12 @@ def policy(orch: Orchestrator = Depends(get_orchestrator)) -> dict[str, Any]:
 def metrics(orch: Orchestrator = Depends(get_orchestrator)) -> dict[str, Any]:
     """Counts and timings since this door started. Needs the key: activity is internal information."""
     return orch.handle_get_metrics()
+
+
+@app.get("/metrics/prometheus", dependencies=APP_KEY, response_class=PlainTextResponse)
+def metrics_prometheus(orch: Orchestrator = Depends(get_orchestrator)) -> PlainTextResponse:
+    """The same numbers as /metrics, in the text format Prometheus reads."""
+    return PlainTextResponse(orch.handle_get_metrics_prometheus(), media_type=PROMETHEUS_CONTENT_TYPE)
 
 
 @app.post("/validate", dependencies=APP_KEY)

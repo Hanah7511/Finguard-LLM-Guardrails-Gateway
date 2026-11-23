@@ -30,7 +30,7 @@
 
 **Honest limits.** More than half of the attacks on the exam still get through, and held requests have no review queue yet. The attack check reads English only. The test sets are small, so each result is uncertain by several points. FinGuard runs on a laptop and in Docker. It is not deployed in production.
 
-**Try it without an LLM key.** After [installing](#1-clone--install), `python scripts/fake_agent.py` runs the 12 sample alerts through the MCP tools, and `python -m pytest test` runs 330 tests. The first run downloads the models. Full numbers and how they were measured: [Metrics & Evaluation](#metrics--evaluation).
+**Try it without an LLM key.** After [installing](#1-clone--install), `python scripts/fake_agent.py` runs the 12 sample alerts through the MCP tools, and `python -m pytest test` runs 340 tests. The first run downloads the models. Full numbers and how they were measured: [Metrics & Evaluation](#metrics--evaluation).
 
 ---
 
@@ -157,7 +157,8 @@ Each door runs its own copy of the orchestrator: the same code, in separate memo
 | `handle_scan_documents()` | MCP Tool 7 | Looks for hidden instructions inside documents |
 | `handle_finalize_check()` | MCP Tool 8 | Before a report goes to a person: were all the required checks done for this case? If so, the report is approved, still with personal data hidden |
 | `handle_release()` | REST `/cases/{case_id}/release` only | Gives a named analyst the real values behind the tokens, for the exact report that was approved |
-| `handle_get_metrics()` | REST `/metrics` | How many requests were allowed, blocked or held for a person, how long checks take, and AI model cost |
+| `handle_get_metrics()` | REST `/metrics` | How many requests were allowed, blocked or held for a person, how long checks and whole requests take, and AI model time and cost |
+| `handle_get_metrics_prometheus()` | REST `/metrics/prometheus` | The same numbers in the format monitoring tools read (Prometheus) |
 
 > Every `handle_*` method does the same 4 things: **(1)** runs the right checks, **(2)** collects each check's decision (PASS, MASK, BLOCK, ESCALATE, ...), **(3)** writes one audit record, with the case number but no personal data, **(4)** returns a short answer with the reason.
 
@@ -283,7 +284,7 @@ finguard-llm-guardrails-gateway/
 │   └── monitoring/
 │       ├── telemetry.py
 │       ├── decision_logger.py
-│       ├── cost_tracker.py
+│       ├── cost_tracker.py          # AI model tokens, cost and call time; prices from data/llm_pricing.json
 │       └── metrics.py               # counts and p50/p95 timings for GET /metrics (no text, ids or names)
 ├── test/
 │   ├── integration/                 # real PostgreSQL tests, skipped unless a database address is set
@@ -301,6 +302,7 @@ finguard-llm-guardrails-gateway/
 │   ├── sanctions/                   # sanctions lists (fictional test list committed)
 │   ├── sample_alerts/               # fictional alerts: the upstream-engine contract
 │   ├── classifiers/                 # the trained attack classifier, saved as JSON weights
+│   ├── llm_pricing.json             # AI model prices per 1M tokens, with the date they were checked
 │   └── training/                    # hand-written fictional AML examples for training it
 ├── scripts/
 │   ├── build_law_store.py           # US regulations from eCFR / govinfo
@@ -406,6 +408,7 @@ uvicorn src.api.main:app --reload --port 8000
 curl http://localhost:8000/health
 curl -H "X-API-Key: <your key>" http://localhost:8000/policy
 curl -H "X-API-Key: <your key>" http://localhost:8000/metrics   # counts since the door started
+curl -H "X-API-Key: <your key>" http://localhost:8000/metrics/prometheus   # the same, for Prometheus
 ```
 
 ### 4. Run MCP server (for AI agents)
@@ -612,12 +615,12 @@ Two more checks (`evals/check_generalisation.py`):
 - [x] Attack classifier v2 (policy v1.14.0), scored on an exam written by the project owner: 12 → 22 of 47 attacks stopped
 - [x] Measure name detection across names of different origins (Step 8)
 - [x] `/metrics` endpoint (REST door): how many requests were allowed, blocked or held for a person, how long each check takes (typical and slowest: p50 / p95), and AI model tokens and cost. The counts are kept in memory, so a restart sets them back to zero, and each door counts only its own requests
+- [x] `/metrics/prometheus`: the same numbers in the format monitoring tools read (Prometheus), so a dashboard such as Grafana could show them. Times are in seconds; p50 / p95 cover this door's recent requests only
+- [x] How long each whole request takes, and how long the AI model takes to answer (p50 / p95 for both). Refused and failed requests are timed too, since they are part of the real wait
+- [x] AI model prices in `data/llm_pricing.json`, with a `checked_on` date (empty until someone checks them against the provider's price page). A call to a model with no price is counted (`unpriced_calls`), and `cost_is_complete` turns false, so an unknown model never looks free
 
 **Planned next: monitoring and cost (not built yet)**
 
-- [ ] `/metrics` also in the format monitoring tools read (Prometheus), so a dashboard such as Grafana can show it
-- [ ] How long each whole request takes, and how long the AI model takes to answer (p50 / p95 for both)
-- [ ] AI model prices in a separate file, with the date they were checked. Calls with an unknown price are counted
 - [ ] Warnings when something looks wrong: too many requests held, checks too slow, or spending too high
 - [ ] A warning when the attack checker starts scoring requests differently from before (drift, measured with the population stability index)
 - [ ] A daily spending limit for the AI model. Once it is reached, `/chat` sends questions to a person instead

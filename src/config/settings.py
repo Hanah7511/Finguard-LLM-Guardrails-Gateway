@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     # Trained by scripts/train_attack_classifier.py: 384 weights and a bias, no pickle.
     # Each policy names its own file in this folder (input_guardrails.attack_classifier.model_file).
     classifiers_dir: Path = PROJECT_ROOT / "data" / "classifiers"
+    # USD per 1M tokens for each LLM model; checked by hand against the provider's price page
+    llm_pricing_path: Path = PROJECT_ROOT / "data" / "llm_pricing.json"
 
     # Storage. "memory" is for tests and quick local runs: a restart loses tokens and case records.
     # "postgres" refuses to start without the database and the key. SecretStr keeps both out of logs.

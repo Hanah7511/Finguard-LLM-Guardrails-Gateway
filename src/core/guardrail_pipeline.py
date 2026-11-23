@@ -8,7 +8,7 @@ from src.input_guardrails.pipeline import InputGuardrailPipeline
 from src.llm.client import LLMClient, LLMUnavailableError
 from src.llm.prompts import SCHEMA_RETRY_NOTE, SYSTEM_PROMPT, build_user_prompt
 from src.monitoring.cost_tracker import CostRecord, CostTracker
-from src.monitoring.telemetry import Decision, GuardrailDecision
+from src.monitoring.telemetry import Decision, GuardrailDecision, Stopwatch
 from src.output_guardrails.pipeline import OutputGuardrailPipeline, OutputStatus
 from src.tool_call_guardrails.pipeline import ToolCallGuardrailPipeline
 from src.vector_store.retriever import RegulationRetriever
@@ -86,9 +86,12 @@ class GuardrailPipeline:
         user_prompt = build_user_prompt(inp.processed_text, docs)
         result = None
         for attempt in range(self.max_retries + 1):
+            llm_time = Stopwatch()
             completion = self.llm.complete(SYSTEM_PROMPT, user_prompt)
             outcome.costs.append(
-                self.cost_tracker.record(completion.model, completion.prompt_tokens, completion.completion_tokens)
+                self.cost_tracker.record(
+                    completion.model, completion.prompt_tokens, completion.completion_tokens, llm_time.ms()
+                )
             )
             # 4. Output guardrails
             result = self.output.run(completion.text)
